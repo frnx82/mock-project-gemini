@@ -1,0 +1,19 @@
+ * Starting mock GDC Dashboard on http://127.0.0.1:8080
+Traceback (most recent call last):
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard_gemini/mock_app.py", line 2900, in <module>
+    server.serve_forever()
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/baseserver.py", line 401, in serve_forever
+    self.start()
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/baseserver.py", line 339, in start
+    self.init_socket()
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/pywsgi.py", line 1672, in init_socket
+    StreamServer.init_socket(self)
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/server.py", line 173, in init_socket
+    self.socket = self.get_listener(self.address, self.backlog, self.family)
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/server.py", line 185, in get_listener
+    return _tcp_listener(address, backlog=backlog, reuse_addr=cls.reuse_addr, family=family)
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/server.py", line 264, in _tcp_listener
+    sock.bind(address)
+  File "/Users/rajeshellappan/.gemini/antigravity/scratch/gdc_dashboard/venv/lib/python3.9/site-packages/gevent/_socketcommon.py", line 543, in bind
+    return self._sock.bind(address)
+OSError: [Errno 48] Address already in use: ('127.0.0.1', 8080)

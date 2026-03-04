@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GDC Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        /* Tabs */
+        .panel-tabs {
+            display: flex;
+            border-bottom: 2px solid #eee;
+            margin-bottom: 15px;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            padding: 8px 15px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: #007bff;
+            background-color: #f8f9fa;
+        }
+
+        .tab-btn.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadein 0.3s;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadein {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Layout */
+        .dashboard-container {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .panel {
+            flex: 1;
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            min-width: 0;
+            /* Prevents flex items from overflowing */
+        }
+
+        .panel-header {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+            color: #444;
+        }
+
+        .section-title {
+            font-size: 1em;
+            font-weight: 600;
+            color: #666;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Navigation */
+        .nav-bar {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+            border: none;
+            background-color: #ddd;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .nav-btn.active {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .nav-btn:hover:not(.active) {
+            background-color: #ccc;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        /* Status Colors */
+        .status-running {
+            color: green;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            color: orange;
+            font-weight: bold;
+        }
+
+        .status-failed {
+            color: red;
+            font-weight: bold;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-default {
+            background-color: #eee;
+            color: #333;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            border-radius: 8px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: black;
+        }
+
+        .container-badge {
+            display: inline-block;
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin-right: 5px;
+        }
+
+        /* Terminal */
+        #terminal-container {
+            width: 100%;
+            height: 500px;
+            background: black;
+            padding: 5px;
+        }
+
+        #cm-content {
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f4f4f4;
+            padding: 10px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div style="margin: -20px -20px 20px -20px;">
+        <!-- Row 1: Full Width Title Bar -->
+        <div
+            style="background-color: #0056b3; padding: 15px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <img src="/static/logo.png" alt="GDC Logo"
+                style="height: 50px; background: white; border-radius: 4px; padding: 2px;">
+            <h1 style="margin: 0; font-size: 24px; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.2);">GDC Dashboard
+            </h1>
+        </div>
+
+        <!-- Row 2: Control Bar (Namespace & Stats) -->
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background-color: #e9ecef; border-bottom: 1px solid #dee2e6;">
+            <!-- Left: Namespace Selector -->
+            <div
+                style="display: flex; align-items: center; gap: 10px; background: #fff; padding: 8px 15px; border-radius: 6px; border: 1px solid #ccc; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <label for="namespace-select"
+                    style="font-size: 14px; font-weight: 600; color: #555; margin: 0;">Namespace:</label>
+                <select id="namespace-select" onchange="fetchData()"
+                    style="padding: 2px 5px; font-size: 14px; border: none; outline: none; background: transparent; font-weight: 500;">
+                    <option value="dbsleuth-dev">GDC-DEV</option>
+                    <option value="dbsleuth-sit">GDC-SIT</option>
+                    <option value="dbsleuth">GDC-UAT</option>
+                    <option value="preprod">Preprod</option>
+                    <option value="prod">Prod</option>
+                </select>
+            </div>
+
+            <!-- Middle: AI Search Bar -->
+            <div style="flex: 1; margin: 0 40px; position: relative; display: flex; align-items: center; gap: 10px;">
+                <input type="text" id="ai-query-input" placeholder="Ask AI... (e.g., 'Show failed pods')"
+                    onkeydown="if(event.key === 'Enter') handleAIQuery()"
+                    style="flex: 1; padding: 10px 15px; border-radius: 20px; border: 1px solid #ccc; font-size: 14px; outline: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); transition: border-color 0.2s;">
+                <button onclick="openHelpModal()" title="View AI Commands"
+                    style="background: #007bff; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;">?</button>
+                <div id="ai-message-toast"
+                    style="display: none; position: absolute; top: 110%; left: 0; right: 0; background: #333; color: #fff; padding: 8px 15px; border-radius: 6px; font-size: 13px; z-index: 1000; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                </div>
+            </div>
+
+            <!-- Right: Pod Status & Time -->
+            <div
+                style="text-align: right; background: #fff; padding: 8px 15px; border-radius: 6px; border: 1px solid #ccc; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <div id="pod-status-summary"
+                    style="font-size: 14px; font-weight: 500; color: #333; margin-bottom: 2px;">
+                    Loading pod stats...
+                </div>
+                <p id="last-updated" style="color: #888; font-size: 11px; margin: 0;"></p>
+            </div>
+            <div style="margin-left: auto;">
+                <!-- Optimizer moved to main tab -->
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-container" style="display: block;">
+
+        <!-- Top Level Tabs -->
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; padding-bottom: 0;">
+            <button id="main-tab-workloads" class="btn btn-primary"
+                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px;"
+                onclick="switchMainTab('workloads')">📦 Workloads</button>
+            <button id="main-tab-networking" class="btn btn-default"
+                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none;"
+                onclick="switchMainTab('networking')">🌐 Networking</button>
+            <button id="main-tab-optimizer" class="btn btn-default"
+                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none;"
+                onclick="switchMainTab('optimizer')">💰 Smart Resource Optimizer</button>
+            <button id="main-tab-security" class="btn btn-default"
+                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none;"
+                onclick="switchMainTab('security')">🛡️ Security Scan</button>
+        </div>
+
+        <!-- Workloads View -->
+        <div id="view-workloads" style="display: block;">
+            <div class="panel" style="width: 100%;">
+                <!-- Sub Tabs for Workloads -->
+                <div class="panel-tabs" id="workloads-tabs"></div>
+                <div id="workloads-content">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Networking View -->
+        <div id="view-networking" style="display: none;">
+            <div class="panel" style="width: 100%;">
+                <!-- Sub Tabs for Networking -->
+                <div class="panel-tabs" id="networking-tabs"></div>
+                <div id="networking-content">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Optimizer View -->
+        <div id="view-optimizer" style="display: none;">
+            <div class="panel" style="width: 100%;">
+                <div class="panel-header"
+                    style="border-bottom: 2px solid #28a745; color: #28a745; display: flex; justify-content: space-between; align-items: center;">
+                    <span>AI Resource Analysis & Optimization</span>
+                    <button class="btn btn-secondary" onclick="openOptimizerHelp()"
+                        style="margin-left: 10px; border-radius: 50%; width: 28px; height: 28px; padding: 0; line-height: 28px; text-align: center; font-size: 14px; border: 1px solid #ccc;">?</button>
+                </div>
+                <div id="optimizer-content" style="padding: 20px;">
+                    <button class="btn btn-primary" onclick="renderOptimizer()">🔄 Refresh Analysis</button>
+                    <div id="opt-loading" style="display: none; text-align: center; margin-top: 20px;">
+                        <p>Analyzing resource usage trends...</p>
+                        <div class="spinner"
+                            style="border: 4px solid #f3f3f3; border-top: 4px solid #28a745; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto;">
+                        </div>
+                    </div>
+                    <table class="table" style="margin-top: 20px;">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Resource</th>
+                                <th>Analysis</th>
+                                <th>Recommendation</th>
+                                <th>Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody id="opt-table-body">
+                            <tr>
+                                <td colspan="5" style="text-align:center; color: #888;">Click Refresh to run analysis
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Guardian View -->
+        <div id="view-security" style="display: none;">
+            <div class="panel">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>🛡️ Cluster Security Scan (AI)</h3>
+                    <div>
+                        <button class="btn btn-secondary" onclick="openSecurityHelp()"
+                            style="margin-right: 10px; border-radius: 50%; width: 32px; height: 32px; padding: 0; line-height: 32px; text-align: center;">?</button>
+                        <button class="btn btn-primary" onclick="renderSecurity()">Run Full Scan</button>
+                    </div>
+                </div>
+                <div id="sec-loading" style="display: none; padding: 20px; text-align: center; color: #666;">
+                    Scanning workloads for vulnerabilities... <span class="spinner"></span>
+                </div>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Resource</th>
+                            <th>Kind</th>
+                            <th>Issue</th>
+                            <th>Remediation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sec-table-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Log Modal -->
+    <div id="logModal" class="modal">
+        <div class="modal-content" style="width: 80%; max-width: 900px;">
+            <span class="close" onclick="closeModal('logModal')">&times;</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2 id="modal-title" style="margin: 0;">Logs</h2>
+                <button class="btn btn-default" style="border-color: #6f42c1; color: #6f42c1; background: #fff;"
+                    onclick="summarizeLogs()">
+                    ✨ Summarize
+                </button>
+            </div>
+
+            <div id="log-summary-box"
+                style="display: none; background: #f0f0ff; border: 1px solid #d0d0ff; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: #6f42c1;">✨ AI Log Summary</h4>
+                <div id="log-summary-content">Loading...</div>
+            </div>
+
+            <pre id="log-content"
+                style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 6px; height: 500px; overflow: auto; margin: 0;">Loading...</pre>
+        </div>
+    </div>
+
+    <!-- Container Select Modal -->
+    <div id="containerSelectModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close" onclick="closeModal('containerSelectModal')">&times;</span>
+            <h2>Select Container</h2>
+            <p>Please select a container to connect to:</p>
+            <div id="container-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+                <!-- Buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Help Modal -->
+    <div id="securityHelpModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close" onclick="closeModal('securityHelpModal')">&times;</span>
+            <h2 style="margin-top: 0; color: #6f42c1;">🛡️ Security Scan Overview</h2>
+            <p>The Security Scan checks your workloads against Kubernetes best practices and common security risks.</p>
+
+            <h4 style="margin-bottom: 10px; color: #333;">Scans Performed:</h4>
+            <ul style="line-height: 1.6; color: #555;">
+                <li><strong>Privileged Containers:</strong> Checks if containers perform as root or essentially as root
+                    on the host.</li>
+                <li><strong>Run As Root:</strong> Checks if the container is configured to run as UID 0 (Root).</li>
+                <li><strong>Resource Limits:</strong> Verifies that CPU and Memory limits are defined to prevent DOS.
+                </li>
+                <li><strong>Read-Only Filesystem:</strong> Checks if the root filesystem is mounted as read-only.</li>
+                <li><strong>Liveness/Readiness Probes:</strong> Ensures probes are configured for availability.</li>
+                <li><strong>HostPath Volumes:</strong> Checks for dangerous HostPath mounts (access to node FS).</li>
+                <li><strong>Privilege Escalation:</strong> Verifies if `allowPrivilegeEscalation` is set to false.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Optimizer Help Modal -->
+    <div id="optimizerHelpModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close" onclick="closeModal('optimizerHelpModal')">&times;</span>
+            <h2 style="margin-top: 0; color: #28a745;">🌱 Smart Optimizer Overview</h2>
+            <p>The Smart Resource Optimizer analyzes your workloads to ensure efficiency, stability, and
+                cost-effectiveness.</p>
+
+            <h4 style="margin-bottom: 10px; color: #333;">Analysis Types:</h4>
+            <ul style="line-height: 1.6; color: #555;">
+                <li><strong>Stability Risk ⚠️:</strong> Identifies workloads missing memory limits, which can lead to
+                    Out-Of-Memory (OOM) kills and node instability. This check is always performed.</li>
+                <li><strong>Cost Saving 📉:</strong> (Requires Metrics) Detects over-provisioned resources where
+                    requested CPU/Memory is significantly higher than actual usage.</li>
+                <li><strong>Performance Risk 📈:</strong> (Requires Metrics) Detects under-provisioned resources where
+                    usage is close to the limit, risking throttling or OOM.</li>
+            </ul>
+            <div
+                style="background: #f8f9fa; padding: 10px; border-left: 4px solid #17a2b8; margin-top: 15px; font-size: 0.9em; color: #555;">
+                <strong>Note:</strong> If Metrics Server is not installed or data is unavailable, only <strong>Stability
+                    Risks</strong> (configuration checks) will be analyzed. If no configuration issues are found, the
+                status will show as <strong>Healthy ✅</strong>.
+            </div>
+        </div>
+    </div>
+
+    <!-- RCA Modal -->
+    <div id="rcaModal" class="modal">
+        <div class="modal-content" style="max-width: 600px; border-top: 4px solid #6f42c1;">
+            <span class="close" onclick="closeModal('rcaModal')">&times;</span>
+            <h2 style="color: #6f42c1; display: flex; align-items: center; gap: 10px;">
+                <span>🪄</span> AI Root Cause Analysis
+            </h2>
+            <div id="rca-loading" style="text-align: center; padding: 20px;">
+                <p>Analyzing logs, events, and config...</p>
+                <div class="spinner"
+                    style="border: 4px solid #f3f3f3; border-top: 4px solid #6f42c1; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto;">
+                </div>
+                <style>
+                    @keyframes spin {
+                        0% {
+                            transform: rotate(0deg);
+                        }
+
+                        100% {
+                            transform: rotate(360deg);
+                        }
+                    }
+                </style>
+            </div>
+            <div id="rca-content"
+                style="display: none; padding: 10px; background: #f8f9fa; border-radius: 6px; white-space: pre-wrap; font-family: monospace; line-height: 1.5;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Env Vars Modal -->
+    <div id="envModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('envModal')">&times;</span>
+            <h2 id="env-title">Configuration</h2>
+            <div id="env-loading">Loading...</div>
+            <div id="env-content" style="display:none;">
+                <h3>Environment Variables</h3>
+                <table id="env-table">
+                    <thead>
+                        <tr>
+                            <th>Container</th>
+                            <th>Name</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <h3>ConfigMaps</h3>
+                <div id="cm-list"></div>
+                <h3>Secrets</h3>
+                <div id="secret-list"></div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <!-- ConfigMap Content Modal -->
+    <div id="cmContentModal" class="modal" style="z-index: 101;">
+        <div class="modal-content" style="width: 70%;">
+            <span class="close" onclick="closeModal('cmContentModal')">&times;</span>
+            <h2 id="cm-title">ConfigMap Content</h2>
+            <pre id="cm-content"></pre>
+        </div>
+    </div>
+
+    <!-- Secret Content Modal -->
+    <div id="secretModal" class="modal" style="z-index: 101;">
+        <div class="modal-content" style="width: 70%; border-top: 4px solid #d9534f;">
+            <span class="close" onclick="closeModal('secretModal')">&times;</span>
+            <h2 id="secret-title" style="color: #d9534f; display: flex; align-items: center; gap: 10px;">
+                <span>🔒</span> Secret Content
+            </h2>
+            <div id="secret-loading" style="display: none;">Loading...</div>
+            <div id="secret-error" style="display: none; color: #d9534f; font-weight: bold; margin-bottom: 10px;"></div>
+
+            <div id="secret-data-container" style="display: none;">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="secret-table-body"></tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Events Modal -->
+    <div id="eventsModal" class="modal" style="z-index: 101;">
+        <div class="modal-content" style="width: 80%;">
+            <span class="close" onclick="closeModal('eventsModal')">&times;</span>
+            <h2 id="events-title">Events</h2>
+            <div id="events-loading">Loading...</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Reason</th>
+                        <th>Message</th>
+                        <th>Count</th>
+                        <th>Last Seen</th>
+                    </tr>
+                </thead>
+                <tbody id="events-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- YAML Modal -->
+    <div id="yamlModal" class="modal" style="z-index: 101;">
+        <div class="modal-content" style="width: 80%;">
+            <span class="close" onclick="closeModal('yamlModal')">&times;</span>
+            <h2 id="yaml-title">YAML View</h2>
+            <pre id="yaml-content"
+                style="background: #f4f4f4; padding: 15px; border-radius: 5px; height: 500px; overflow: auto;"></pre>
+        </div>
+    </div>
+
+    <!-- AI Help Modal -->
+    <div id="helpModal" class="modal" style="z-index: 102;">
+        <div class="modal-content" style="width: 60%; max-width: 600px;">
+            <span class="close" onclick="closeModal('helpModal')">&times;</span>
+            <h2 style="color: #007bff; margin-top: 0;">🤖 Ask AI Commands</h2>
+            <p style="color: #666;">Try these natural language commands to interact with your cluster:</p>
+
+            <div style="background: #f8f9fa; border-radius: 8px; padding: 15px; border: 1px solid #eee;">
+                <h4 style="margin: 10px 0 5px; color: #333;">🔍 Filtering & Navigation</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #555;">
+                    <li><code>show all pods</code> - Reset filters and show everything.</li>
+                    <li><code>show failed pods</code> - Filter for CrashLoopBackOff/Error.</li>
+                    <li><code>show running pods</code> - Filter for running pods.</li>
+                    <li><code>show pending pods</code> - Filter for pending pods.</li>
+                    <li><code>navigate to optimizer</code> - Switch tabs via voice/text.</li>
+                </ul>
+
+                <h4 style="margin: 15px 0 5px; color: #333;">⚙️ Actions</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #555;">
+                    <li><code>scale [deployment] to [N]</code> - Scale replicas (e.g., <i>scale billing to 5</i>).</li>
+                    <li><code>restart [deployment]</code> - Trigger a rolling restart.</li>
+                    <li><code>delete pod [name]</code> - Delete a specific pod (Careful!).</li>
+                </ul>
+
+                <h4 style="margin: 15px 0 5px; color: #333;">📝 Diagnostics</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #555;">
+                    <li><code>analyze [pod]</code> - Run AI Root Cause Analysis.</li>
+                    <li><code>show logs for [pod]</code> - View live logs.</li>
+                    <li><code>show events for [resource]</code> - View Kubernetes events.</li>
+                    <li><code>get yaml for [resource]</code> - View full YAML configuration.</li>
+                </ul>
+            </div>
+            <div style="margin-top: 20px; text-align: right; font-size: 12px; color: #888;">
+                * Commands support fuzzy matching. You can try variations like "fix pod x" or "how is pod y doing".
+            </div>
+        </div>
+    </div>
+
+    <!-- Terminal Modal -->
+    <div id="terminalModal" class="modal">
+        <div class="modal-content" style="width: 80%; max-width: 900px; background: #1e1e1e; color: #fff;">
+            <span class="close" onclick="closeTerminal()" style="color: #fff;">&times;</span>
+            <h2 id="terminal-title" style="color: #fff; margin-top:0;">Terminal</h2>
+            <div id="term-debug" style="color: yellow; font-family: monospace; font-size: 12px; margin-bottom: 5px;">
+                Status: Initializing...</div>
+            <div id="terminal-container" style="width: 100%; height: 500px; background: black;"></div>
+            <script>
+                let refreshInterval;
+
+                let currentFilter = null; // { target: 'Pod', criteria: { status: 'Failed' } }
+
+                function switchMainTab(tab) {
+                    const workloadsBtn = document.getElementById('main-tab-workloads');
+                    const networkingBtn = document.getElementById('main-tab-networking');
+                    const optimizerBtn = document.getElementById('main-tab-optimizer');
+                    const securityBtn = document.getElementById('main-tab-security');
+
+                    const workloadsView = document.getElementById('view-workloads');
+                    const networkingView = document.getElementById('view-networking');
+                    const optimizerView = document.getElementById('view-optimizer');
+                    const securityView = document.getElementById('view-security');
+
+                    // Reset all
+                    workloadsBtn.className = 'btn btn-default';
+                    networkingBtn.className = 'btn btn-default';
+                    optimizerBtn.className = 'btn btn-default';
+                    securityBtn.className = 'btn btn-default';
+
+                    workloadsView.style.display = 'none';
+                    networkingView.style.display = 'none';
+                    optimizerView.style.display = 'none';
+                    securityView.style.display = 'none';
+
+                    // Activate selected
+                    if (tab === 'workloads') {
+                        workloadsBtn.className = 'btn btn-primary';
+                        workloadsView.style.display = 'block';
+                    } else if (tab === 'networking') {
+                        networkingBtn.className = 'btn btn-primary';
+                        networkingView.style.display = 'block';
+                    } else if (tab === 'optimizer') {
+                        optimizerBtn.className = 'btn btn-primary';
+                        optimizerView.style.display = 'block';
+                        renderOptimizer();
+                    } else if (tab === 'security') {
+                        securityBtn.className = 'btn btn-primary';
+                        securityView.style.display = 'block';
+                        renderSecurity();
+                    }
+                }
+
+                function renderOptimizer() {
+                    const loading = document.getElementById('opt-loading');
+                    const tbody = document.getElementById('opt-table-body');
+                    const currentNamespace = document.getElementById('namespace-select').value;
+
+                    loading.style.display = 'block';
+                    tbody.innerHTML = '';
+
+                    fetch(`/api/ai/optimize?namespace=${currentNamespace}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            loading.style.display = 'none';
+                            tbody.innerHTML = '';
+
+                            data.recommendations.forEach(rec => {
+                                const tr = document.createElement('tr');
+                                tr.innerHTML = `
+                                <td style="font-weight: bold;">${rec.type}</td>
+                                <td>${rec.resource}</td>
+                                <td>${rec.reason}</td>
+                                <td style="color: #28a745; font-weight: 500;">${rec.action}</td>
+                                <td>${rec.impact}</td>
+                            `;
+                                tbody.appendChild(tr);
+                            });
+
+                            if (data.recommendations.length === 0) {
+                                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">✅ No optimization opportunities found. Resources are efficient!</td></tr>';
+                            }
+                        })
+                        .catch(e => {
+                            loading.style.display = 'none';
+                            tbody.innerHTML = `<tr><td colspan="5" style="color:red;">Error: ${e}</td></tr>`;
+                        });
+                }
+
+                function renderSecurity() {
+                    const loading = document.getElementById('sec-loading');
+                    const tbody = document.getElementById('sec-table-body');
+                    const currentNamespace = document.getElementById('namespace-select').value;
+
+                    loading.style.display = 'block';
+                    tbody.innerHTML = '';
+
+                    fetch(`/api/ai/security_scan?namespace=${currentNamespace}`)
+                        .then(r => {
+                            if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText) });
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            loading.style.display = 'none';
+                            tbody.innerHTML = '';
+
+                            (data.risks || []).forEach(risk => {
+                                let severityColor = '#28a745';
+                                if (risk.severity === 'Critical') severityColor = '#dc3545';
+                                if (risk.severity === 'High') severityColor = '#fd7e14';
+                                if (risk.severity === 'Medium') severityColor = '#ffc107';
+
+                                const tr = document.createElement('tr');
+                                tr.innerHTML = `
+                                <td style="color: ${severityColor}; font-weight: bold;">${risk.severity}</td>
+                                <td>${risk.resource}</td>
+                                <td>${risk.kind}</td>
+                                <td>${risk.issue}</td>
+                                <td style="font-family: monospace; background: #f8f9fa;">${risk.remediation}</td>
+                            `;
+                                tbody.appendChild(tr);
+                            });
+
+                            if ((data.risks || []).length === 0) {
+                                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">✅ No security risks found.</td></tr>';
+                            }
+                        })
+                        .catch(e => {
+                            loading.style.display = 'none';
+                            tbody.innerHTML = `<tr><td colspan="5" style="color:red;">Error: ${e.message}</td></tr>`;
+                        });
+                }
+
+                async function fetchData() {
+                    const currentNamespace = document.getElementById('namespace-select').value;
+                    const timestampEl = document.getElementById('last-updated');
+
+                    // Only show "Updating..." if it's been a while or on first load to avoid flickering
+                    // timestampEl.innerText = `Updating...`; 
+
+                    try {
+                        const [workloadsRes, servicesRes, vsRes] = await Promise.all([
+                            fetch(`/api/workloads?namespace=${currentNamespace}`),
+                            fetch(`/api/services?namespace=${currentNamespace}`),
+                            fetch(`/api/virtualservices?namespace=${currentNamespace}`)
+                        ]);
+
+                        if (!workloadsRes.ok) throw new Error(`Workloads API: ${workloadsRes.statusText}`);
+                        if (!servicesRes.ok) throw new Error(`Services API: ${servicesRes.statusText}`);
+                        if (!vsRes.ok) throw new Error(`VirtualServices API: ${vsRes.statusText}`);
+
+                        const workloads = await workloadsRes.json();
+                        const services = await servicesRes.json();
+                        const virtualServices = await vsRes.json();
+
+                        if (workloads.error) throw new Error(workloads.error);
+                        if (services.error) throw new Error(services.error);
+
+                        renderWorkloads(workloads);
+                        renderNetworking(services, virtualServices);
+                        updatePodStats(workloads);
+
+                        timestampEl.innerText = `Last updated: ${new Date().toLocaleTimeString()}`;
+                        timestampEl.style.color = "#888";
+                    } catch (error) {
+                        console.error("Fetch error", error);
+                        timestampEl.innerText = `⚠️ Update Failed: ${error.message}`;
+                        timestampEl.style.color = "red";
+                    }
+                }
+
+                async function handleAIQuery() {
+                    const input = document.getElementById('ai-query-input');
+                    const query = input.value.trim();
+                    if (!query) return;
+
+                    // Show visual feedback
+                    input.disabled = true;
+                    showToast("Asking AI...", false);
+
+                    try {
+                        const toast = document.getElementById('ai-message-toast');
+                        fetch('/api/ai/query', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: query })
+                        })
+                            .then(r => r.json())
+                            .then(async data => {
+                                input.disabled = false;
+
+                                // Handle interactions
+                                if (data.action === 'filter') {
+                                    currentFilter = { target: data.target, criteria: data.criteria };
+                                    if (['Pod', 'Deployment', 'Job', 'StatefulSet', 'DaemonSet'].includes(data.target)) {
+                                        switchMainTab('workloads');
+                                        // Wait a tick for main tab valid
+                                        setTimeout(() => switchTab('workloads', data.target), 50);
+                                    }
+                                    if (['Service', 'VirtualService'].includes(data.target)) {
+                                        switchMainTab('networking');
+                                        setTimeout(() => switchTab('networking', data.target), 50);
+                                    }
+
+                                    fetchData();
+                                    showToast("✨ " + data.message, true);
+
+                                } else if (data.action === 'scale') {
+                                    const resource = await findResourceByName(data.target, ['Deployment', 'StatefulSet']);
+                                    if (resource) {
+                                        await fetch('/api/scale', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ name: resource.name, type: resource.type, action: 'set', count: data.count, namespace: document.getElementById('namespace-select').value })
+                                        });
+                                        fetchData();
+                                        showToast("🚀 " + data.message, true);
+                                    } else {
+                                        showToast(`Could not find resource matching "${data.target}"`, false);
+                                    }
+
+                                } else if (data.action === 'logs') {
+                                    const resource = await findResourceByName(data.target, ['Pod']);
+                                    if (resource) {
+                                        openLogsModal(resource.name);
+                                        showToast("🚀 " + data.message, true);
+                                    } else {
+                                        showToast(`Could not find pod matching "${data.target}"`, false);
+                                    }
+
+                                } else if (data.action === 'delete') {
+                                    const resource = await findResourceByName(data.target, ['Pod', 'Deployment', 'Service']);
+                                    if (resource) {
+                                        deleteResource(resource.name, resource.type);
+                                        showToast("🚀 " + data.message, true);
+                                    } else {
+                                        showToast(`Could not find resource matching "${data.target}"`, false);
+                                    }
+
+                                } else if (data.action === 'describe') {
+                                    const resource = await findResourceByName(data.target, ['Deployment', 'Pod', 'Service']);
+                                    if (resource) openEnvModal(resource.name, resource.type);
+                                    else showToast(`Could not find resource matching "${data.target}"`, false);
+
+                                } else if (data.action === 'analyze') {
+                                    const resource = await findResourceByName(data.target, ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet']);
+                                    if (resource) analyzeResource(resource.name, resource.type, resource.status);
+                                    else showToast(`Could not find resource matching "${data.target}"`, false);
+
+                                } else if (data.action === 'reset') {
+                                    currentFilter = null;
+                                    input.value = '';
+                                    fetchData();
+                                    showToast(data.message, true);
+
+                                } else if (data.action === 'chat') {
+                                    let html = `🤖 ${data.message}`;
+                                    if (data.suggestion) {
+                                        html += `<br><button class="btn btn-primary btn-sm" style="margin-top:5px;" onclick="document.getElementById('ai-query-input').value='${data.suggestion.action_payload}'; handleAIQuery();">Fix: ${data.suggestion.text}</button>`;
+                                    }
+                                    const toast = document.getElementById('ai-message-toast');
+                                    toast.innerHTML = html;
+                                    toast.style.display = 'block';
+                                    if (!data.suggestion) setTimeout(() => { toast.style.display = 'none'; }, 4000);
+
+                                } else if (data.action === 'restart') {
+                                    if (confirm(`AI Action: Restart ${data.target}?`)) {
+                                        fetch('/api/restart', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                name: data.target,
+                                                type: 'Deployment', // Defaulting to deployment for now, could be improved
+                                                namespace: document.getElementById('namespace-select').value
+                                            })
+                                        })
+                                            .then(r => r.json())
+                                            .then(res => {
+                                                if (res.error) showToast("Error: " + res.error, false);
+                                                else showToast("🚀 " + res.message, true);
+                                            });
+                                    }
+
+                                } else if (data.action === 'events') {
+                                    // "show events for x" -> find resource first to get real name if needed, or trust AI
+                                    // For now, trusting AI target extraction or finding via findResourceByName
+                                    const resource = await findResourceByName(data.target, []);
+                                    if (resource) openEventsModal(resource.name);
+                                    else showToast(`Could not find resource "${data.target}"`, false);
+
+                                } else if (data.action === 'yaml') {
+                                    const resource = await findResourceByName(data.target, []);
+                                    if (resource) openYamlModal(resource.name, resource.type);
+                                    else showToast(`Could not find resource "${data.target}"`, false);
+
+                                } else if (data.action === 'navigate') {
+                                    showToast("🔄 " + data.message, true);
+                                    switchMainTab(data.target);
+
+                                } else {
+                                    showToast(`🤖 ${data.message || 'Done'}`, true);
+                                }
+
+                                if (data.action !== 'chat') input.value = '';
+
+                            })
+                            .catch(e => {
+                                input.disabled = false;
+                                showToast("AI Error: " + e.message, false);
+                            });
+                    } catch (e) {
+                        input.disabled = false;
+                        showToast("Request Error: " + e.message, false);
+                    }
+                }
+
+                // Helper to find resource from currently fetched data (would be better to have centralized store)
+                async function findResourceByName(partialName, types) {
+                    // Quick fetch to search
+                    const currentNamespace = document.getElementById('namespace-select').value;
+                    const [wRes, sRes] = await Promise.all([
+                        fetch(`/api/workloads?namespace=${currentNamespace}`),
+                        fetch(`/api/services?namespace=${currentNamespace}`)
+                    ]);
+                    const workloads = await wRes.json();
+                    const services = await sRes.json();
+                    const all = [...workloads, ...services];
+
+                    return all.find(item => item.name.includes(partialName) && (types.length === 0 || types.includes(item.type)));
+                }
+
+                async function deleteResource(name, type) {
+                    if (!confirm(`AI Action: Are you sure you want to DELETE ${type} ${name}?`)) return;
+                    try {
+                        const ns = document.getElementById('namespace-select').value;
+                        await fetch('/api/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: name, type: type, namespace: ns })
+                        });
+                        showToast(`Deleted ${name}`, true);
+                        fetchData();
+                    } catch (e) { alert(e); }
+                }
+
+                function showToast(msg, autoHide) {
+                    const toast = document.getElementById('ai-message-toast');
+                    toast.innerText = msg; // Basic text, mocked markdown support
+                    toast.style.display = 'block';
+                    if (autoHide) {
+                        setTimeout(() => { toast.style.display = 'none'; }, 4000);
+                    }
+                }
+
+                function updatePodStats(workloads) {
+                    const pods = workloads.filter(w => w.type === 'Pod');
+                    const running = pods.filter(p => p.status === 'Running').length;
+                    const pending = pods.filter(p => p.status === 'Pending').length;
+                    const failed = pods.filter(p => p.status === 'Failed' || p.status === 'CrashLoopBackOff' || p.status === 'Error').length;
+
+                    const el = document.getElementById('pod-status-summary');
+                    el.innerHTML = `
+                        Pod Status: 
+                        <span style="color:green; margin-left: 5px;">Running: ${running}</span>
+                        <span style="color:orange; margin-left: 10px;">Pending: ${pending}</span>
+                        <span style="color:red; margin-left: 10px;">Failed: ${failed}</span>
+                    `;
+                }
+
+                function renderWorkloads(data) {
+                    const tabsContainer = document.getElementById('workloads-tabs');
+                    const contentContainer = document.getElementById('workloads-content');
+
+                    // Only render tabs once
+                    if (tabsContainer.children.length === 0) {
+                        const types = ['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'Pod', 'ConfigMap', 'Secret'];
+                        let tabBtns = '';
+                        let contentDivs = '';
+
+                        types.forEach((type, index) => {
+                            const isActive = index === 0 ? 'active' : '';
+                            tabBtns += `<button class="tab-btn ${isActive}" onclick="switchTab('workloads', '${type}')">${type}s</button>`;
+                            contentDivs += `<div id="workloads-${type}" class="tab-content ${isActive}"></div>`;
+                        });
+
+                        tabsContainer.innerHTML = tabBtns;
+                        contentContainer.innerHTML = contentDivs;
+                    }
+
+                    const types = ['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'Pod', 'ConfigMap', 'Secret'];
+
+                    types.forEach(type => {
+                        let items = data.filter(item => item.type === type);
+
+                        // Apply AI Filter if active
+                        // Note: We also handle sub-tab switching in handleAIQuery now
+                        if (currentFilter && currentFilter.target === type && currentFilter.criteria.status) {
+                            const statusCriteria = currentFilter.criteria.status;
+                            if (statusCriteria === 'Failed') {
+                                items = items.filter(i => ['Failed', 'Error', 'CrashLoopBackOff', 'OOMKilled', 'ImagePullBackOff', 'ErrImagePull', 'CreateContainerConfigError'].includes(i.status));
+                            } else if (statusCriteria === 'Running') {
+                                items = items.filter(i => i.status === 'Running');
+                            } else if (statusCriteria === 'Pending') {
+                                items = items.filter(i => i.status === 'Pending');
+                            }
+                        }
+
+                        const container = document.getElementById(`workloads-${type}`);
+
+                        if (items.length === 0) {
+                            if (currentFilter && currentFilter.target === type) {
+                                container.innerHTML = '<p>No resources found matching AI filter.</p>';
+                            } else {
+                                container.innerHTML = '<p>No resources found.</p>';
+                            }
+                            return;
+                        }
+
+                        let html = `<table><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Age</th><th>Actions</th></tr></thead><tbody>`;
+                        html += items.map(item => {
+                            let statusColor = item.status === 'Running' || item.status.includes('/') ? 'green' : 'orange';
+                            if (item.status === 'Failed') statusColor = 'red';
+
+                            let row = `<tr><td>${item.name}</td>`;
+                            row += `<td style="color:${statusColor}">${item.status}</td>`;
+                            row += `<td>${item.ready}/${item.total}</td>`;
+                            row += `<td>${item.age}</td>`;
+
+                            // Actions
+                            let actions = '';
+                            if (['Deployment', 'StatefulSet'].includes(type)) {
+                                actions += `<button class="btn btn-default" onclick="scaleWorkload('${item.name}', '${item.type}', 'down')">-</button>`;
+                                actions += `<button class="btn btn-default" onclick="scaleWorkload('${item.name}', '${item.type}', 'up')">+</button>`;
+                                actions += `<button class="btn btn-primary" onclick="openEnvModal('${item.name}', '${item.type}')">Config</button>`;
+                            } else if (type === 'Pod') {
+                                const containersJson = encodeURIComponent(JSON.stringify(item.containers || []));
+                                actions += `<button class="btn btn-primary" onclick="openTerminalPrompt('${item.name}', '${containersJson}')">Console</button> `;
+                                actions += `<button class="btn btn-default" onclick="openLogsModal('${item.name}')">Logs</button> `;
+                                actions += `<button class="btn btn-default" style="border-color: #6f42c1; color: #6f42c1;" onclick="analyzeResource('${item.name}', '${item.type}', '${item.status}')">🪄 RCA</button> `;
+                                actions += `<button class="btn btn-default" onclick="openEnvModal('${item.name}', '${item.type}')">Config</button>`;
+                            } else if (type === 'DaemonSet') {
+                                actions += `<button class="btn btn-primary" onclick="openEnvModal('${item.name}', '${item.type}')">Config</button>`;
+                            } else if (type === 'ConfigMap') {
+                                actions += `<button class="btn btn-default" onclick="openConfigMapModal('${item.name}')">View</button>`;
+                            } else if (type === 'Secret') {
+                                actions += `<button class="btn btn-default" onclick="openSecretModal('${item.name}')">View</button>`;
+                            }
+                            row += `<td>${actions}</td></tr>`;
+                            return row;
+                        }).join('');
+
+                        html += `</tbody></table>`;
+                        container.innerHTML = html;
+                    });
+                }
+
+                function renderNetworking(services, virtualServices) {
+                    const tabsContainer = document.getElementById('networking-tabs');
+                    const contentContainer = document.getElementById('networking-content');
+
+                    // Only render tabs once
+                    if (tabsContainer.children.length === 0) {
+                        const types = ['Service', 'VirtualService'];
+                        let tabBtns = '';
+                        let contentDivs = '';
+
+                        types.forEach((type, index) => {
+                            const isActive = index === 0 ? 'active' : '';
+                            tabBtns += `<button class="tab-btn ${isActive}" onclick="switchTab('networking', '${type}')">${type}s</button>`;
+                            contentDivs += `<div id="networking-${type}" class="tab-content ${isActive}"></div>`;
+                        });
+
+                        tabsContainer.innerHTML = tabBtns;
+                        contentContainer.innerHTML = contentDivs;
+                    }
+
+                    // Services
+                    const svcContainer = document.getElementById('networking-Service');
+                    if (services.length > 0) {
+                        let html = `<table><thead><tr><th>Name</th><th>Type</th><th>Cluster IP</th><th>Ports</th><th>Age</th></tr></thead><tbody>`;
+                        html += services.map(s => `
+                    <tr>
+                        <td>${s.name}</td>
+                        <td>${s.type}</td>
+                        <td>${s.cluster_ip}</td>
+                        <td>${s.ports}</td>
+                        <td>${s.age}</td>
+                    </tr>
+                `).join('');
+                        html += `</tbody></table>`;
+                        svcContainer.innerHTML = html;
+                    } else {
+                        svcContainer.innerHTML = '<p>No Services found.</p>';
+                    }
+
+                    // VirtualServices
+                    const vsContainer = document.getElementById('networking-VirtualService');
+                    if (virtualServices.length > 0) {
+                        let html = `<table><thead><tr><th>Name</th><th>Hosts</th><th>Gateways</th><th>Age</th></tr></thead><tbody>`;
+                        html += virtualServices.map(vs => {
+                            // Ensure hosts is an array and handle comma-separated strings
+                            let hosts = Array.isArray(vs.hosts) ? vs.hosts : (vs.hosts.includes(',') ? vs.hosts.split(',') : [vs.hosts]);
+                            let hostLinks = hosts.map(h => {
+                                h = h.trim();
+                                if (h === '*') return '*'; // Don't link wildcard
+                                let url = h.startsWith('http') ? h : 'http://' + h;
+                                return '<a href="' + url + '" target="_blank" style="color: #4da6ff; text-decoration: underline;">' + h + '</a>';
+                            }).join(', ');
+
+                            return `
+                    <tr>
+                        <td>${vs.name}</td>
+                        <td>${hostLinks}</td>
+                        <td>${vs.gateways}</td>
+                        <td>${vs.age}</td>
+                    </tr>
+                `}).join('');
+                        html += `</tbody></table>`;
+                        vsContainer.innerHTML = html;
+                    } else {
+                        vsContainer.innerHTML = '<p>No VirtualServices found.</p>';
+                    }
+                }
+
+                function switchTab(panel, type) {
+                    const tabsContainer = document.getElementById(`${panel}-tabs`);
+                    const contentContainer = document.getElementById(`${panel}-content`);
+
+                    // Update buttons
+                    Array.from(tabsContainer.children).forEach(btn => {
+                        btn.classList.toggle('active', btn.innerText.includes(type));
+                    });
+
+                    // Update content visibility
+                    Array.from(contentContainer.children).forEach(div => {
+                        div.classList.toggle('active', div.id === `${panel}-${type}`);
+                    });
+                }
+
+                // Actions
+                function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+                window.onclick = function (e) { if (e.target.classList.contains('modal')) e.target.style.display = 'none'; }
+
+                async function scaleWorkload(name, type, action) {
+                    if (!confirm(`Scale ${type} ${name} ${action}?`)) return;
+                    try {
+                        const ns = document.getElementById('namespace-select').value;
+                        const response = await fetch('/api/scale', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: name, type: type, action: action, namespace: ns })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || response.statusText);
+                        if (data.error) throw new Error(data.error);
+
+                        fetchData();
+                        showToast(`Successfully scaled ${name}`, true);
+                    } catch (e) { alert("Error scaling: " + e.message); }
+                }
+
+                function openLogsModal(podName) {
+                    document.getElementById('logModal').style.display = 'block';
+                    document.getElementById('modal-title').innerText = `Logs: ${podName}`;
+                    document.getElementById('log-content').innerText = "Loading...";
+                    const ns = document.getElementById('namespace-select').value;
+                    fetch(`/api/pods/${podName}/logs?namespace=${ns}`)
+                        .then(r => r.json())
+                        .then(d => document.getElementById('log-content').innerText = d.logs || d.error)
+                        .catch(e => document.getElementById('log-content').innerText = e);
+                }
+
+                function openEnvModal(name, type) {
+                    document.getElementById('envModal').style.display = 'block';
+                    document.getElementById('env-title').innerText = `Config: ${name}`;
+                    document.getElementById('env-loading').style.display = 'block';
+                    document.getElementById('env-content').style.display = 'none';
+
+                    const ns = document.getElementById('namespace-select').value;
+                    fetch(`/api/workloads/env?name=${name}&type=${type}&namespace=${ns}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            document.getElementById('env-loading').style.display = 'none';
+                            document.getElementById('env-content').style.display = 'block';
+
+                            const tbody = document.querySelector('#env-table tbody');
+                            tbody.innerHTML = (data.env || []).map(e => `<tr><td>${e.container}</td><td>${e.name}</td><td>${e.value}</td></tr>`).join('');
+                            if (!data.env || data.env.length === 0) tbody.innerHTML = '<tr><td colspan="3">No variables</td></tr>';
+
+                            document.getElementById('cm-list').innerHTML = (data.config_maps || []).map(c => `<button class="btn btn-default" onclick="openConfigMapModal('${c}')">${c}</button>`).join(' ') || 'None';
+                            document.getElementById('secret-list').innerHTML = (data.secrets || []).map(s => `<button class="btn btn-default" onclick="openSecretModal('${s}')">🔒 ${s}</button>`).join(' ') || 'None';
+                        })
+                        .catch(e => {
+                            document.getElementById('env-loading').style.display = 'none';
+                            document.getElementById('env-content').style.display = 'block';
+                            document.querySelector('#env-table tbody').innerHTML = `<tr><td colspan="3" style="color:red;">Error fetching data: ${e.message}</td></tr>`;
+                        });
+                }
+
+                function openConfigMapModal(name) {
+                    document.getElementById('cmContentModal').style.display = 'block';
+                    document.getElementById('cm-title').innerText = `ConfigMap: ${name}`;
+                    document.getElementById('cm-content').innerText = "Loading...";
+                    const ns = document.getElementById('namespace-select').value;
+
+                    fetch(`/api/configmaps/${name}?namespace=${ns}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.error) {
+                                document.getElementById('cm-content').innerText = "Error: " + data.error;
+                            } else {
+                                // Pretty print JSON if possible
+                                const content = JSON.stringify(data.data, null, 2);
+                                document.getElementById('cm-content').innerText = content;
+                            }
+                        })
+                        .catch(e => document.getElementById('cm-content').innerText = "Error: " + e);
+                }
+
+                function openSecretModal(name) {
+                    const modal = document.getElementById('secretModal');
+                    const title = document.getElementById('secret-title');
+                    const loading = document.getElementById('secret-loading');
+                    const errorDiv = document.getElementById('secret-error');
+                    const dataContainer = document.getElementById('secret-data-container');
+                    const tbody = document.getElementById('secret-table-body');
+                    const currentNamespace = document.getElementById('namespace-select').value;
+
+                    modal.style.display = 'block';
+                    loading.style.display = 'block';
+                    errorDiv.style.display = 'none';
+                    dataContainer.style.display = 'none';
+                    title.innerHTML = `<span>🔒</span> Secret: ${name} <small style="font-size: 12px; color: #777;">(${currentNamespace})</small>`;
+                    tbody.innerHTML = '';
+
+                    fetch(`/api/secrets/${name}?namespace=${currentNamespace}`)
+                        .then(r => {
+                            if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Fetch failed'); });
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            loading.style.display = 'none';
+                            dataContainer.style.display = 'block';
+
+                            // Render Data
+                            if (data.data) {
+                                Object.keys(data.data).forEach(key => {
+                                    tbody.innerHTML += `
+                                        <tr>
+                                            <td style="font-weight:bold; color:#0056b3;">${key}</td>
+                                            <td style="font-family:monospace; background:#f8f8f8;">${data.data[key]}</td>
+                                        </tr>`;
+                                });
+                            }
+                        })
+                        .catch(err => {
+                            loading.style.display = 'none';
+                            errorDiv.style.display = 'block';
+                            errorDiv.innerText = `⛔ ${err.message || 'Access Denied'}`;
+                        });
+                }
+
+                function openTerminalPrompt(podName, containersJson) {
+                    const containers = JSON.parse(decodeURIComponent(containersJson));
+
+                    if (containers.length === 0) {
+                        alert("No containers found in this pod.");
+                        return;
+                    }
+
+                    if (containers.length === 1) {
+                        // Direct connect
+                        openTerminal(podName, containers[0].name);
+                    } else {
+                        // Show selection modal
+                        const modal = document.getElementById('containerSelectModal');
+                        const list = document.getElementById('container-list');
+
+                        list.innerHTML = containers.map(c =>
+                            `<button class="btn btn-default" style="text-align: left; padding: 10px;" onclick="selectContainer('${podName}', '${c.name}')">
+                                <strong>${c.name}</strong>
+                            </button>`
+                        ).join('');
+
+                        modal.style.display = 'block';
+                    }
+                }
+
+                function selectContainer(podName, containerName) {
+                    closeModal('containerSelectModal');
+                    openTerminal(podName, containerName);
+                }
+
+                function analyzeResource(name, type, status) {
+                    document.getElementById('rcaModal').style.display = 'block';
+                    document.getElementById('rca-loading').style.display = 'block';
+                    document.getElementById('rca-content').style.display = 'none';
+
+                    const ns = document.getElementById('namespace-select').value;
+                    fetch('/api/ai/rca', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: name, type: type, status: status, namespace: ns })
+                    })
+                        .then(r => {
+                            if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText) });
+                            return r.json();
+                        })
+                        .then(data => {
+                            document.getElementById('rca-loading').style.display = 'none';
+                            const content = document.getElementById('rca-content');
+
+                            if (data.error) throw new Error(data.error);
+                            if (!data.analysis) throw new Error("No analysis returned from AI.");
+
+                            content.style.display = 'block';
+                            // Simple markdown-ish rendering for bold/headers
+                            let html = data.analysis
+                                .replace(/### (.*)/g, '<h3 style="margin-top:0; color:#333;">$1</h3>')
+                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                .replace(/- (.*)/g, '<li>$1</li>');
+                            content.innerHTML = html;
+                        })
+                        .catch(e => {
+                            document.getElementById('rca-loading').style.display = 'none';
+                            document.getElementById('rca-content').innerText = "Error: " + e.message;
+                            document.getElementById('rca-content').style.display = 'block';
+                        });
+                }
+
+
+                function summarizeLogs() {
+                    const logText = document.getElementById('log-content').innerText;
+                    const summaryBox = document.getElementById('log-summary-box');
+                    const summaryContent = document.getElementById('log-summary-content');
+
+                    summaryBox.style.display = 'block';
+                    summaryContent.innerText = "Analyzing log patterns...";
+
+                    fetch('/api/ai/summarize_logs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ logs: logText })
+                    })
+                        .then(r => {
+                            if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText) });
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            let html = data.summary
+                                .replace(/### (.*)/g, '<h4 style="margin: 5px 0; color:#333;">$1</h4>')
+                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                .replace(/- (.*)/g, '<li style="margin-left: 20px;">$1</li>');
+                            summaryContent.innerHTML = `<ul style="margin: 0; padding: 0; list-style: none;">${html}</ul>`;
+                        })
+                        .catch(e => {
+                            summaryContent.innerText = "Error summarizing logs: " + e.message;
+                        });
+                }
+
+
+                function openOptimizer() {
+                    document.getElementById('optimizerModal').style.display = 'block';
+                    document.getElementById('opt-loading').style.display = 'block';
+                    document.getElementById('opt-content').style.display = 'none';
+
+                    const currentNamespace = document.getElementById('namespace-select').value;
+                    fetch(`/api/ai/optimize?namespace=${currentNamespace}`)
+                        .then(r => {
+                            if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText) });
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            document.getElementById('opt-loading').style.display = 'none';
+                            document.getElementById('opt-content').style.display = 'block';
+                            const tbody = document.getElementById('opt-table-body');
+                            tbody.innerHTML = '';
+
+                            data.recommendations.forEach(rec => {
+                                const tr = document.createElement('tr');
+                                tr.innerHTML = `
+                                <td style="font-weight: bold;">${rec.type}</td>
+                                <td>${rec.resource}</td>
+                                <td>${rec.reason}</td>
+                                <td style="color: #28a745; font-weight: 500;">${rec.action}</td>
+                                <td>${rec.impact}</td>
+                            `;
+                                tbody.appendChild(tr);
+                            });
+
+                            if (data.recommendations.length === 0) {
+                                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">✅ No optimization opportunities found. Resources are efficient!</td></tr>';
+                            }
+                        })
+                        .catch(e => {
+                            document.getElementById('opt-loading').style.display = 'none';
+                            document.getElementById('opt-content').style.display = 'block';
+                            document.getElementById('opt-table-body').innerHTML = `<tr><td colspan="5" style="color:red;">Error: ${e.message}</td></tr>`;
+                        });
+                }
+
+                function openConfigMapModal(name) {
+                    document.getElementById('cmContentModal').style.display = 'block';
+                    document.getElementById('cm-content').innerText = 'Loading...';
+                    document.getElementById('cm-title').innerText = `CM: ${name}`;
+                    const ns = document.getElementById('namespace-select').value;
+                    fetch(`/api/configmaps/${name}?namespace=${ns}`)
+                        .then(r => r.json())
+                        .then(d => document.getElementById('cm-content').innerText = d.error ? d.error : JSON.stringify(d.data, null, 2));
+                }
+
+                // Terminal Logic
+                let socket;
+                let term;
+                let fitAddon;
+
+                function openTerminal(podName, containerName) {
+                    // ALERT FOR DEBUGGING
+                    // alert("Debug: Opening terminal for " + podName); 
+
+                    try {
+                        const debugEl = document.getElementById('term-debug');
+                        if (debugEl) debugEl.innerText = "Status: Initializing function...";
+
+                        document.getElementById('terminalModal').style.display = 'block';
+                        document.getElementById('terminal-title').innerText = `Terminal: ${podName}`;
+
+                        if (typeof Terminal === 'undefined') {
+                            throw new Error("xterm.js is not loaded");
+                        }
+
+                        if (term) term.dispose();
+
+                        term = new Terminal({
+                            cursorBlink: true,
+                            theme: { background: '#1e1e1e' }
+                        });
+
+                        if (typeof FitAddon !== 'undefined') {
+                            fitAddon = new FitAddon.FitAddon();
+                            term.loadAddon(fitAddon);
+                        }
+
+                        // Delay opening to ensure modal is visible and has dimensions
+                        setTimeout(() => {
+                            try {
+                                if (debugEl) debugEl.innerText = "Status: Opening xterm...";
+
+                                const container = document.getElementById('terminal-container');
+                                if (!container) throw new Error("Terminal container div not found");
+
+                                term.open(container);
+
+                                // Force initial size before fit
+                                term.resize(80, 24);
+
+                                if (fitAddon) {
+                                    try {
+                                        fitAddon.fit();
+                                    } catch (e) { console.error("Fit error:", e); }
+                                }
+
+                                term.write('Connecting to terminal...\r\n');
+                                if (debugEl) debugEl.innerText = "Status: Connecting Socket...";
+
+                                // Explicitly define URL (auto-detection usually works)
+                                socket = io();
+
+                                socket.on('connect', () => {
+                                    console.log('Socket connected');
+                                    if (debugEl) {
+                                        debugEl.innerText = "Status: Connected! Requesting shell...";
+                                        debugEl.style.color = "lime";
+                                    }
+
+                                    socket.emit('connect_terminal', {
+                                        namespace: document.getElementById('namespace-select').value,
+                                        pod: podName,
+                                        container: containerName
+                                    });
+                                });
+
+                                socket.on('connect_error', (err) => {
+                                    if (debugEl) {
+                                        debugEl.innerText = "Status: Connection Error: " + err;
+                                        debugEl.style.color = "red";
+                                    }
+                                    term.write(`\r\nConnection Error: ${err}\r\n`);
+                                });
+
+                                socket.on('terminal_output', (d) => {
+                                    if (debugEl) debugEl.innerText = "Status: Received Data";
+                                    console.log('Term output:', d.data);
+                                    term.write(d.data);
+                                });
+                                socket.on('terminal_error', (d) => term.write(`\r\nError: ${d.data}\r\n`));
+                                term.onData(d => socket.emit('terminal_input', { data: d }));
+                            } catch (innerE) {
+                                alert("Error inside timeout: " + innerE.message);
+                            }
+                        }, 200);
+
+                        window.addEventListener('resize', resizeTerminal);
+                    } catch (e) {
+                        alert("Critical Error opening terminal: " + e.message);
+                        console.error(e);
+                    }
+                }
+
+                function resizeTerminal() { if (fitAddon) fitAddon.fit(); }
+
+                function closeTerminal() {
+                    document.getElementById('terminalModal').style.display = 'none';
+                    if (socket) socket.disconnect();
+                    if (term) term.dispose();
+                    window.removeEventListener('resize', resizeTerminal);
+                }
+
+                function openEventsModal(name) {
+                    document.getElementById('eventsModal').style.display = 'block';
+                    document.getElementById('events-title').innerText = `Events: ${name}`;
+                    document.getElementById('events-loading').style.display = 'block';
+                    document.getElementById('events-table-body').innerHTML = '';
+
+                    const ns = document.getElementById('namespace-select').value;
+                    fetch(`/api/events/${name}?namespace=${ns}`)
+                        .then(r => {
+                            if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText) });
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            document.getElementById('events-loading').style.display = 'none';
+                            const tbody = document.getElementById('events-table-body');
+                            if (data.events && data.events.length > 0) {
+                                tbody.innerHTML = data.events.map(e => `
+                                    <tr>
+                                        <td>${e.type}</td>
+                                        <td>${e.reason}</td>
+                                        <td>${e.message}</td>
+                                        <td>${e.count}</td>
+                                        <td>${new Date(e.last_timestamp).toLocaleString()}</td>
+                                    </tr>
+                                `).join('');
+                            } else {
+                                tbody.innerHTML = '<tr><td colspan="5">No events found.</td></tr>';
+                            }
+                        })
+                        .catch(e => {
+                            document.getElementById('events-loading').innerText = "Error: " + e.message;
+                        });
+                }
+
+                function openSecurityHelp() {
+                    document.getElementById('securityHelpModal').style.display = 'block';
+                }
+
+                function openOptimizerHelp() {
+                    document.getElementById('optimizerHelpModal').style.display = 'block';
+                }
+
+                function openYamlModal(name, type) {
+                    document.getElementById('yamlModal').style.display = 'block';
+                    document.getElementById('yaml-title').innerText = `YAML: ${type} ${name}`;
+                    document.getElementById('yaml-content').innerText = "Loading...";
+
+                    const ns = document.getElementById('namespace-select').value;
+                    fetch(`/api/yaml/${name}?type=${type}&namespace=${ns}`)
+                        .then(r => {
+                            if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText) });
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+
+                            if (data.yaml) {
+                                document.getElementById('yaml-content').innerText = JSON.stringify(data.yaml, null, 2);
+                            } else {
+                                document.getElementById('yaml-content').innerText = "Error: No YAML content returned.";
+                            }
+                        })
+                        .catch(e => {
+                            document.getElementById('yaml-content').innerText = "Error: " + e.message;
+                        });
+                }
+
+                function openHelpModal() {
+                    document.getElementById('helpModal').style.display = 'block';
+                }
+
+                // Init
+                fetchData();
+                refreshInterval = setInterval(fetchData, 5000);
+            </script>
+</body>
+
+</html>

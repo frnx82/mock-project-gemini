@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gdc-dashboard-sa
+  # namespace: your-namespace # Namespace will be applied strictly at apply time or via kustomize
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gdc-dashboard-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create", "get"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments/scale", "statefulsets/scale"]
+  verbs: ["patch", "update"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.istio.io"]
+  resources: ["virtualservices"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gdc-dashboard-rb
+subjects:
+- kind: ServiceAccount
+  name: gdc-dashboard-sa
+  # namespace: default # defaults to current namespace, but kept if user wants to be explicit
+roleRef:
+  kind: Role
+  name: gdc-dashboard-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gdc-dashboard
+  # namespace: your-namespace
+  labels:
+    app: gdc-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gdc-dashboard
+  template:
+    metadata:
+      labels:
+        app: gdc-dashboard
+    spec:
+      serviceAccountName: gdc-dashboard-sa
+      containers:
+      - name: dashboard
+        image: gdc-dashboard:latest # Replace with your actual image registry path
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gdc-dashboard-svc
+  # namespace: your-namespace
+spec:
+  selector:
+    app: gdc-dashboard
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

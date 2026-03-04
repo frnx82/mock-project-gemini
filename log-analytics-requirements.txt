@@ -1,0 +1,215 @@
+================================================================================
+  GEMINI-POWERED LOG ANALYTICS TOOL — REQUIREMENTS & IMPLEMENTATION PLAN
+  Date: 2026-02-25
+  Environment: GDC Kubernetes Cluster (Prometheus + Grafana available)
+================================================================================
+
+ENVIRONMENT CONSTRAINTS
+-----------------------
+Available:   Prometheus (cluster-level metrics), Grafana, Kubernetes API
+Not Available: BigQuery, Google Cloud Logging, Loki (initially)
+
+KEY CLARIFICATION: Prometheus stores METRICS (numbers), not log text.
+To store and query actual logs, Loki must be added — it is lightweight,
+designed to sit alongside Prometheus, and already supported by Grafana.
+
+
+================================================================================
+IMPORTANT: PROMETHEUS vs LOKI
+================================================================================
+
+Prometheus  → Stores metrics (error rates, memory usage, restart counts)
+Loki        → Stores log text (actual log lines from pods)
+Grafana     → Already running; supports BOTH Prometheus and Loki natively
+
+These two tools are complementary. Loki uses the same label model as Prometheus
+(pod, namespace, service) and deploys with a single Helm command.
+
+
+================================================================================
+RECOMMENDED ARCHITECTURE
+================================================================================
+
+Data Flow:
+----------
+  Your Pods
+      │
+      ├──► Promtail (DaemonSet) ──────────────────► Loki (log store)
+      │                                                   │
+      └──► Prometheus (already running, metrics)          │
+                    │                                     │
+                    └──────────────────────────┐          │
+                                               ▼          ▼
+                                     GDC Dashboard Backend
+                                     /api/log/analyze
+                                               │
+                                               ├── Loki HTTP API  (log text)
+                                               ├── Prometheus API (metrics context)
+                                               └── K8s API        (events/status)
+                                               │
+                                               ▼
+                                           Gemini 2.5 Flash
+                                               │
+                                               ▼
+                                    Root Cause + Resolution
+
+
+================================================================================
+PHASE 1: IMMEDIATE (Zero Extra Infrastructure)
+================================================================================
+
+Use what is already available RIGHT NOW:
+
+Sources:
+  - Kubernetes API logs  → kubectl logs (recent buffer per pod)
+  - Prometheus metrics   → GET http://prometheus:9090/api/v1/query
+  - Kubernetes events    → already fetched in GDC dashboard
+
+GDC Dashboard route: /api/log/analyze
+  1. Fetch last N lines of pod logs via K8s API
+  2. Query Prometheus for supporting metrics:
+       container_oom_events_total          (OOM kills)
+       kube_pod_container_status_restarts_total  (restart count)
+       rate(http_requests_total{status="500"}[5m])  (error rate spike)
+       container_memory_usage_bytes        (memory growth before crash)
+  3. Fetch Kubernetes events (warnings, restarts, evictions)
+  4. Bundle all three into one Gemini prompt
+  5. Return structured RCA: root_cause, resolution_steps, kubectl_commands
+
+Coverage: ~70% of full value — works today with zero new infrastructure.
+
+
+================================================================================
+PHASE 2: WEEK 1 — Deploy Loki + Promtail
+================================================================================
+
+Deploy Loki in the cluster alongside existing Prometheus:
+
+  helm repo add grafana https://grafana.github.io/helm-charts
+  helm install loki grafana/loki-stack -n monitoring \
+    --set promtail.enabled=true \
+    --set loki.enabled=true
+
+What this adds:
+  - Promtail DaemonSet: automatically tails logs from ALL pods, no code changes needed
+  - Loki: stores the log text, queryable by label (namespace, pod, app, container)
+  - Retention: configurable (e.g., 7 days of logs)
+
+Add Loki to Grafana:
+  - In Grafana: Configuration → Data Sources → Add Loki → URL: http://loki:3100
+  - Immediately enables log viewing alongside metrics in Grafana dashboards
+
+Loki Query API (for GDC dashboard):
+  GET http://loki:3100/loki/api/v1/query_range
+      ?query={namespace="your-ns",app="my-service"}
+      &start=<unix_ns>&end=<unix_ns>
+      &limit=500
+
+
+================================================================================
+PHASE 3: WEEK 2 — Gemini RCA with Full Log Context
+================================================================================
+
+GDC Dashboard: Enhanced /api/log/analyze using all three sources:
+
+  Input:  service name, namespace, time range
+  Steps:
+    1. Query Loki for log text (last 30 min, up to 1000 lines)
+    2. Query Prometheus for metrics in same window
+    3. Fetch K8s events and pod status
+    4. Send all to Gemini with structured prompt:
+
+       "You are an expert SRE. Analyze these logs, metrics, and events.
+        Logs: [Loki log lines]
+        Metrics: [Prometheus query results]
+        Events: [K8s warning events]
+        Question: What is the exact root cause of the current issue?
+        Provide: root_cause, blast_radius, resolution_steps, kubectl_commands"
+
+  Output (structured JSON):
+    {
+      "root_cause":        "DB connection pool exhausted — OOMKill 2min earlier",
+      "blast_radius":      ["checkout-service", "order-service"],
+      "timeline":          ["14:30 OOMKill", "14:32 500 errors spike", "14:35 timeout"],
+      "resolution_steps":  ["1. Increase memory limit", "2. Restart payment-service"],
+      "kubectl_commands":  ["kubectl rollout restart deployment/payment-service -n prod"],
+      "confidence":        "high"
+    }
+
+
+================================================================================
+PHASE 4: WEEK 3 — Cross-Service Correlation
+================================================================================
+
+- Add trace_id propagation via HTTP headers (X-Trace-Id) in all services (no
+  OpenTelemetry needed — just pass the header through manually)
+- Loki query: fetch logs from ALL services where trace_id matches → gives the
+  full cross-service story for a single user request
+- GDC dashboard renders a timeline view of the trace across services
+- Gemini identifies exactly WHICH service introduced the error vs which ones
+  only propagated it
+
+
+================================================================================
+PHASE 5: WEEK 4 — Proactive Anomaly Detection
+================================================================================
+
+- Background agent (cron every 5 min) queries Prometheus for anomaly signals:
+    - Error rate > 3x rolling average → alert
+    - Pod restarts > threshold → alert
+    - Memory approaching limit → alert
+    - Zero log output from a service → crash indicator
+- When anomaly detected, auto-trigger Gemini analysis (Phase 3 approach)
+- Surface result as a dashboard notification BEFORE user has to search
+- Include one-click "Apply Fix" button using existing /api/heal/execute route
+
+
+================================================================================
+WHAT PROMETHEUS CONTRIBUTES TO GEMINI's ANALYSIS
+================================================================================
+
+Even though Prometheus doesn't store logs, its metrics add critical context:
+
+  Prometheus Query                              What it tells Gemini
+  -----------------------------------------------------------------------
+  container_oom_events_total                    "OOMKilled 3 times today"
+  kube_pod_container_status_restarts_total      "Restarted 7x in 1 hour"
+  rate(http_requests_total{status="500"}[5m])   "Error rate spiked at 14:32"
+  container_memory_usage_bytes                  "Memory grew 200MB→950MB before crash"
+  kube_pod_status_phase                         "Pod stuck in Pending for 10 min"
+  container_cpu_throttled_seconds_total         "CPU throttled heavily before slowdown"
+
+This metrics + logs + events combination gives Gemini far more accurate RCA
+than logs alone.
+
+
+================================================================================
+IMPLEMENTATION ROLLOUT SUMMARY
+================================================================================
+
+Phase   | What                                    | Effort      | Infrastructure
+--------|------------------------------------------|-------------|----------------
+1 Now   | K8s logs + Prometheus + K8s events→Gemini| ~4 hours   | None
+2 Wk 1  | Deploy Loki + Promtail (Helm)            | ~30 min    | Loki in cluster
+3 Wk 2  | Full Loki+Prometheus+Events→Gemini RCA   | ~1 day     | (already done)
+4 Wk 3  | Cross-service trace correlation          | ~1-2 days  | None extra
+5 Wk 4  | Proactive anomaly detection agent        | ~1 day     | None extra
+
+
+================================================================================
+GEMINI ADVANTAGE: LARGE CONTEXT WINDOW
+================================================================================
+
+Traditional log tools use regex, keyword search, or ML anomaly models.
+Gemini's 1M token context window changes everything:
+
+- Fit thousands of log lines from multiple services into ONE prompt
+- Ask "what happened?" in plain English
+- Gemini reasons about causality, sequence, and cross-service dependencies
+- No pre-training needed — works on your logs immediately
+- Understands your code's domain-specific errors, function names, business logic
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================

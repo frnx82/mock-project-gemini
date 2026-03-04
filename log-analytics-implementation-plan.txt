@@ -1,0 +1,213 @@
+================================================================================
+  LOG ANALYTICS IMPLEMENTATION PLAN — GDC Dashboard (Gemini)
+================================================================================
+
+PROJECT CONSTRAINTS
+-------------------
+- Namespace-level admin access only (no cluster admin)
+- Cannot install DaemonSets (Fluentd, Filebeat, etc.)
+- Can read pod logs, events, services, endpoints, configmaps via K8s API
+
+
+================================================================================
+1. WHAT YOU CAN DO WITH NAMESPACE ADMIN ACCESS
+================================================================================
+
+  Capability                          Available?   How
+  ─────────────────────────────────   ──────────   ──────────────────────────
+  Read pod logs                       ✅ Yes       v1.read_namespaced_pod_log()
+  List all pods/deployments           ✅ Yes       v1.list_namespaced_pod()
+  Read events                         ✅ Yes       v1.list_namespaced_event()
+  Read Services/Endpoints             ✅ Yes       v1.list_namespaced_service()
+  Exec into pods                      ✅ Yes       kubernetes.stream
+  Read cluster-level logs (node)      ❌ No        Needs cluster admin
+  Install DaemonSets                  ❌ No        Needs cluster admin
+
+
+================================================================================
+2. ARCHITECTURE — 3 LAYERS
+================================================================================
+
+LAYER 1: LOG COLLECTION (Backend)
+─────────────────────────────────
+Since we can't install DaemonSets, collect logs on-demand via K8s API:
+
+  ┌──────────────────────────────────────────────┐
+  │  Dashboard Pod (your app)                    │
+  │                                              │
+  │  Periodic Log Collector (background thread)  │
+  │  ├─ Every 60s: list all pods                │
+  │  ├─ For each pod: read last 500 lines       │
+  │  ├─ Parse structured logs (JSON/text)       │
+  │  ├─ Extract: timestamp, level, message,     │
+  │  │   service, traceId, spanId, status        │
+  │  └─ Store in SQLite / in-memory buffer      │
+  └──────────────────────────────────────────────┘
+
+Key endpoints to build:
+  - /api/logs/collect      — trigger collection cycle
+  - /api/logs/search       — search across all pod logs
+  - /api/logs/timeline     — aggregated error timeline
+
+
+LAYER 2: SERVICE DEPENDENCY DISCOVERY
+──────────────────────────────────────
+Build a service map by analyzing logs + K8s resources:
+
+  1. K8s Services & Endpoints → which pods back which service
+  2. Log pattern analysis → extract HTTP calls, gRPC calls, DB connections:
+     - "calling service-b", "GET http://service-b:8080/api/..."
+     - "connecting to postgres:5432", "redis timeout"
+  3. Istio VirtualServices (if available) → route rules reveal dependencies
+  4. Environment variables → DATABASE_URL, REDIS_HOST, SERVICE_B_URL
+
+  Service Map Example:
+    frontend → backend-api → database
+                           → redis
+                           → billing-service → payment-gateway
+
+
+LAYER 3: AI-POWERED ROOT CAUSE ANALYSIS
+────────────────────────────────────────
+When a user asks "why is the app slow?" in the AI chat:
+
+  ┌─ User Question ─────────────────────────┐
+  │ "billing-service is returning 500s"     │
+  └─────────────────────────────────────────┘
+           │
+           ▼
+  ┌─ Context Builder ───────────────────────┐
+  │ 1. Fetch billing-service pod logs       │
+  │ 2. Fetch upstream dependencies (DB etc) │
+  │ 3. Fetch K8s events for all related pods│
+  │ 4. Fetch service dependency map         │
+  │ 5. Check recent deployments/restarts    │
+  └─────────────────────────────────────────┘
+           │
+           ▼
+  ┌─ Gemini Prompt ─────────────────────────┐
+  │ "Here are logs from billing-service,    │
+  │  its database pod, redis, and upstream  │
+  │  services. The user reports 500 errors. │
+  │  Analyze the cross-service logs to find │
+  │  the root cause."                       │
+  └─────────────────────────────────────────┘
+           │
+           ▼
+  ┌─ AI Response ───────────────────────────┐
+  │ Root Cause: Database connection pool    │
+  │ exhausted. billing-service logs show    │
+  │ "connection timeout" starting at 14:23, │
+  │ which correlates with database pod      │
+  │ showing OOM events at 14:21.            │
+  │                                         │
+  │ Fix: Increase DB pod memory limits and  │
+  │ add connection pool recycling.          │
+  └─────────────────────────────────────────┘
+
+
+================================================================================
+3. WHAT IS MCP SERVER?
+================================================================================
+
+MCP (Model Context Protocol) is an open standard by Anthropic that lets AI
+models (Gemini, Claude, etc.) connect to external data sources and tools in
+a standardized way. Think of it as a plugin system for AI:
+
+  ┌─────────┐         ┌─────────────┐         ┌──────────────┐
+  │ AI Chat │ ──MCP──▶│ MCP Server  │ ──API──▶│ K8s Cluster  │
+  │ (Gemini)│◀──MCP── │ (your app)  │◀──API── │ Logs, Events │
+  └─────────┘         └─────────────┘         └──────────────┘
+
+CAN YOU USE MCP FOR LOG ANALYTICS?
+──────────────────────────────────
+Yes, but it's NOT the best fit for your case:
+
+  Approach                         Pros                              Cons
+  ───────────────────────────────  ────────────────────────────────   ───────────────────────────────
+  MCP Server                       Standard protocol, works with     Adds complexity, requires
+                                   any AI client that supports MCP   MCP-compatible client; your
+                                                                     dashboard already talks to Gemini
+  Direct Gemini Integration        Simpler, faster, your Converse    Not portable to other AI
+  (what you have now)              endpoint already does              providers
+                                   function-calling
+
+RECOMMENDATION: Stick with your current direct Gemini function-calling approach
+(Converse endpoint) and enhance it with log analytics tools. You already have
+the K8S_TOOLS framework — just add log-specific tools.
+
+
+================================================================================
+4. IMPLEMENTATION PHASES
+================================================================================
+
+PHASE 1: LOG COLLECTOR SERVICE (Background Thread)
+───────────────────────────────────────────────────
+  - Add a background thread that runs every 60 seconds
+  - Fetches logs from all pods in the namespace
+  - Parses structured logs (JSON) and unstructured logs (regex)
+  - Stores in an in-memory rolling buffer (last 1 hour, ~100K lines)
+  - Indexes by: timestamp, pod, service, log level, traceId
+
+PHASE 2: SERVICE DEPENDENCY MAP
+────────────────────────────────
+  - Auto-discover dependencies from:
+    * K8s Services and Endpoints
+    * Pod environment variables (DB_HOST, REDIS_URL, etc.)
+    * Log pattern matching (HTTP calls, gRPC, DB connections)
+  - Cache the dependency map, refresh every 5 minutes
+  - Expose via /api/services/dependency-map endpoint
+
+PHASE 3: NEW GEMINI FUNCTION-CALLING TOOLS
+───────────────────────────────────────────
+Add to existing K8S_TOOLS array:
+
+  k8s_search_logs(query, services, time_range)
+    → Search across all pod logs with keyword/regex
+
+  k8s_get_service_map()
+    → Return the dependency graph as JSON
+
+  k8s_get_error_timeline(minutes)
+    → Aggregated error counts per service over time
+
+  k8s_correlate_errors(service)
+    → Fetch logs from the service AND all its dependencies
+    → Return correlated timeline showing cause-and-effect
+
+PHASE 4: NEW UI FEATURES
+─────────────────────────
+  - Log Analytics Tab — searchable, filterable log viewer across all pods
+  - Service Map Visualization — interactive dependency graph (D3.js/Mermaid)
+  - Error Timeline — sparkline/chart of errors over time per service
+  - AI Root Cause Button — one-click "why is this failing?"
+    * Automatically collects cross-service logs
+    * Feeds them to Gemini with dependency context
+    * Returns structured root cause + fix suggestions
+
+
+================================================================================
+5. SUMMARY
+================================================================================
+
+  Question                    Answer
+  ─────────────────────────   ─────────────────────────────────────────────
+  Best approach?              On-demand log collection via K8s API
+                              + Gemini function-calling for analysis
+
+  Namespace-only access?      Fully doable — read_namespaced_pod_log()
+                              is all you need
+
+  Service dependencies?       Discover from Services, Endpoints, EnvVars,
+                              and log patterns
+
+  MCP Server?                 Not needed — your existing Gemini integration
+                              is simpler and more direct
+
+  AI root cause?              Feed correlated cross-service logs to Gemini
+                              with dependency context
+
+
+================================================================================
+  END OF PLAN
+================================================================================
