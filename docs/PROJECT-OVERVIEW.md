@@ -110,24 +110,7 @@ They work together:
 
 ## How It Integrates with Your Existing Stack
 
-```
-┌──────────────────────────────────────────────────┐
-│                Your Workflow                     │
-│                                                  │
-│  Developer commits code                          │
-│        ↓                                         │
-│  CI/CD builds image, pushes to registry          │
-│        ↓                                         │
-│  ArgoCD syncs deployment to cluster         ← DEPLOY
-│        ↓                                         │
-│  GDC Dashboard monitors, diagnoses, optimizes  ← OPERATE
-│        ↓                                         │
-│  Issue found? AI gives root cause + fix          │
-│        ↓                                         │
-│  Developer fixes code, commits...               │
-│        (cycle repeats)                           │
-└──────────────────────────────────────────────────┘
-```
+![Workflow Integration](diagrams/flow_workflow_integration.png)
 
 ---
 
