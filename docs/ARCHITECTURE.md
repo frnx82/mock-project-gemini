@@ -2,69 +2,7 @@
 
 ## High-Level Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        BROWSER (User)                           │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │              Frontend (Single Page Application)             │ │
-│  │                   templates/index.html                      │ │
-│  │                                                             │ │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐  │ │
-│  │  │Workloads │ │Networking│ │ Security │ │  AI Chat      │  │ │
-│  │  │   Tab    │ │   Tab    │ │   Tab    │ │  (Converse)   │  │ │
-│  │  └──────────┘ └──────────┘ └──────────┘ └───────────────┘  │ │
-│  │                                                             │ │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐  │ │
-│  │  │ Modals   │ │ xterm.js │ │ Toasts / │ │  Ask AI       │  │ │
-│  │  │(Diagnose,│ │(Console) │ │ Confirm  │ │  Search Bar   │  │ │
-│  │  │ Logs...) │ │          │ │ Dialogs  │ │               │  │ │
-│  │  └──────────┘ └──────────┘ └──────────┘ └───────────────┘  │ │
-│  └───────────────────┬──────────────────────┬──────────────────┘ │
-│                      │ HTTP/REST            │ WebSocket           │
-└──────────────────────┼──────────────────────┼────────────────────┘
-                       │                      │
-┌──────────────────────┼──────────────────────┼────────────────────┐
-│                      ▼                      ▼                    │
-│              DASHBOARD POD (Backend)                             │
-│                    app.py                                        │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                 Flask + Flask-SocketIO                     │  │
-│  │               (gevent async mode)                         │  │
-│  │                                                           │  │
-│  │  ┌─────────────────┐  ┌─────────────────────────────────┐ │  │
-│  │  │  REST API Layer │  │  WebSocket Layer (Socket.IO)    │ │  │
-│  │  │                 │  │                                 │ │  │
-│  │  │  /api/workloads │  │  connect_terminal  → k8s exec  │ │  │
-│  │  │  /api/services  │  │  terminal_input    → stdin      │ │  │
-│  │  │  /api/scale     │  │  terminal_output   ← stdout     │ │  │
-│  │  │  /api/restart   │  │  disconnect        → cleanup    │ │  │
-│  │  │  /api/ai/*      │  │                                 │ │  │
-│  │  │  /api/vuln_scan │  └─────────────────────────────────┘ │  │
-│  │  └─────────────────┘                                      │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                      │                      │                    │
-│          ┌───────────┴───────────┐  ┌───────┴──────────┐        │
-│          ▼                       ▼  ▼                  ▼        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐      │
-│  │ Kubernetes   │  │ Google       │  │ Trivy            │      │
-│  │ Python       │  │ Gemini AI    │  │ (subprocess)     │      │
-│  │ Client       │  │ (google-genai│  │                  │      │
-│  │              │  │  SDK)        │  │ Image CVE        │      │
-│  │ Pods, Deploy │  │              │  │ scanning         │      │
-│  │ Events, Logs │  │ Diagnose,    │  │                  │      │
-│  │ Scale, Exec  │  │ Analyze,     │  └──────────────────┘      │
-│  │              │  │ Optimize,    │                              │
-│  └──────┬───────┘  │ Converse     │                              │
-│         │          └──────┬───────┘                               │
-│         ▼                 ▼                                       │
-│  ┌──────────────┐  ┌──────────────┐                              │
-│  │ Kubernetes   │  │ Vertex AI    │                              │
-│  │ API Server   │  │ (Gemini)     │                              │
-│  └──────────────┘  └──────────────┘                              │
-└──────────────────────────────────────────────────────────────────┘
-```
+![High-Level Architecture](diagrams/high_level_architecture.png)
 
 ---
 
@@ -176,109 +114,18 @@ A Python Flask application using `flask-socketio` (gevent async mode) for both R
 The app uses two distinct AI patterns:
 
 #### Pattern 1: Direct Prompt (Most AI Features)
-```
-User Action (click AI Diagnose)
-    │
-    ▼
-Backend collects K8s context:
-    - Pod logs (all containers)
-    - K8s events
-    - Workload spec (replicas, images, resources)
-    - Pod status and conditions
-    │
-    ▼
-Build structured prompt:
-    "You are a K8s SRE. Here is the context: {...}
-     Return JSON with: health_score, risks, kubectl_hints..."
-    │
-    ▼
-Gemini returns structured JSON
-    │
-    ▼
-Frontend renders the result in a modal
-```
+
+![AI Pattern 1: Direct Prompt](diagrams/ai_pattern_direct_prompt.png)
 
 #### Pattern 2: Function Calling Agent (AI Chat / Converse)
-```
-User types: "Why is billing-service slow?"
-    │
-    ▼
-Gemini receives message + available K8s tools:
-    - k8s_list_pods
-    - k8s_get_pod_logs
-    - k8s_get_pod_events
-    - k8s_describe_pod
-    - k8s_list_deployments
-    - k8s_get_deployment_status
-    - k8s_list_services
-    - k8s_get_configmap
-    - k8s_get_namespace_events
-    - k8s_list_statefulsets
-    │
-    ▼
-Gemini decides which tools to call:
-    → k8s_list_pods(namespace, label="app=billing")
-    → k8s_get_pod_logs(namespace, pod="billing-xxx")
-    │
-    ▼
-Backend executes real K8s API calls, returns data to Gemini
-    │
-    ▼
-Gemini reasons over REAL data → generates answer
-    │
-    ▼ (up to 5 iterations of tool-calling)
-Final answer sent to user
-```
+
+![AI Pattern 2: Agentic Function Calling](diagrams/ai_pattern_function_calling.png)
 
 ---
 
 ### 4. Deployment Architecture
 
-```
-┌─────────────────────────────────────────┐
-│           Kubernetes Namespace          │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │  Dashboard Pod                    │  │
-│  │                                   │  │
-│  │  ┌─────────────────────────────┐  │  │
-│  │  │  Container: gdc-dashboard   │  │  │
-│  │  │                             │  │  │
-│  │  │  Python 3.9                 │  │  │
-│  │  │  Flask + gevent             │  │  │
-│  │  │  gunicorn (2 workers)       │  │  │
-│  │  │  Trivy 0.59.1               │  │  │
-│  │  │  Port: 8080                 │  │  │
-│  │  └─────────────────────────────┘  │  │
-│  │                                   │  │
-│  │  ServiceAccount:                  │  │
-│  │    namespace admin (RBAC)         │  │
-│  └───────────────────────────────────┘  │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │  Service (ClusterIP)              │  │
-│  │  Port: 8080 → Pod:8080           │  │
-│  └───────────────────────────────────┘  │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │  Istio VirtualService (optional)  │  │
-│  │  Routes external traffic → Svc   │  │
-│  └───────────────────────────────────┘  │
-│                                         │
-│  ┌───────────────┐ ┌─────────────────┐  │
-│  │ Your Apps     │ │ Your Apps       │  │
-│  │ (frontend,    │ │ (billing,       │  │
-│  │  backend...)  │ │  database...)   │  │
-│  └───────────────┘ └─────────────────┘  │
-└─────────────────────────────────────────┘
-         │                    │
-         ▼                    ▼
-┌──────────────┐     ┌──────────────────┐
-│ K8s API      │     │ Vertex AI        │
-│ Server       │     │ (Gemini 2.5 Flash│
-│              │     │  us-central1)    │
-└──────────────┘     └──────────────────┘
-```
+![Deployment Architecture](diagrams/deployment_architecture.png)
 
 ---
 
@@ -349,37 +196,6 @@ gdc_dashboard_gemini/
 
 ### 8. Data Flow Summary
 
-```
-           READ                              WRITE
-    ┌──────────────────┐            ┌──────────────────┐
-    │ List workloads   │            │ Scale replicas   │
-    │ Get pod logs     │            │ Rolling restart  │
-    │ Get events       │            │ Delete resource  │
-    │ Read ConfigMaps  │            │ Exec into pod    │
-    │ Read Secrets     │            │                  │
-    │ Get YAML spec    │            │                  │
-    └────────┬─────────┘            └────────┬─────────┘
-             │                               │
-             ▼                               ▼
-      ┌──────────────┐               ┌──────────────┐
-      │ K8s API      │               │ K8s API      │
-      │ (GET calls)  │               │ (PATCH/POST) │
-      └──────────────┘               └──────────────┘
-
-           READ + REASON
-    ┌──────────────────┐
-    │ Collect K8s data │
-    │ Build prompt     │
-    │ Send to Gemini   │
-    │ Parse response   │
-    │ Return to UI     │
-    └────────┬─────────┘
-             │
-             ▼
-      ┌──────────────┐
-      │ Vertex AI    │
-      │ Gemini 2.5   │
-      └──────────────┘
-```
+![Data Flow Summary](diagrams/data_flow_diagram.png)
 
 All reads are safe and non-destructive. Writes (scale, restart, delete) require user confirmation.

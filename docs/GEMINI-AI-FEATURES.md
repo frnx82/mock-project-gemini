@@ -34,10 +34,7 @@ The dashboard talks to Google's Gemini AI through a secure API. When you click a
 
 ### Technical Details
 
-```
-Dashboard Pod  ──HTTPS──▶  Vertex AI (Gemini 2.5 Flash)
-                            us-central1 (or your region)
-```
+![High-Level Connection](diagrams/high_level_architecture.png)
 
 | Component | Detail |
 |---|---|
@@ -68,16 +65,7 @@ Every AI feature in the dashboard uses one of two patterns:
 
 ### Pattern 1: Direct Prompt (used by most features)
 
-```
-┌──────────────┐        ┌──────────────┐        ┌──────────────┐
-│  User clicks │  ───▶  │  Backend     │  ───▶  │  Gemini      │
-│  "AI Diagnose"│       │  collects K8s│        │  returns     │
-│              │        │  data, builds│        │  structured  │
-│              │  ◀───  │  prompt      │  ◀───  │  JSON        │
-│  Modal shows │        │  parses JSON │        │              │
-│  the result  │        │  response    │        │              │
-└──────────────┘        └──────────────┘        └──────────────┘
-```
+![Pattern 1: Direct Prompt](diagrams/ai_pattern_direct_prompt.png)
 
 **How it works:**
 1. User triggers an AI action (e.g., clicks "Diagnose")
@@ -94,18 +82,7 @@ Every AI feature in the dashboard uses one of two patterns:
 
 ### Pattern 2: Agentic Function Calling (AI Chat / Converse)
 
-```
-┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  User    │────▶│ Gemini   │────▶│ Dashboard│────▶│ K8s API  │
-│  asks:   │     │ decides  │     │ executes │     │ returns  │
-│  "Why is │     │ which    │     │ the tool │     │ real data│
-│  billing │◀────│ tools to │◀────│ call     │◀────│          │
-│  slow?"  │     │ call     │     │          │     │          │
-└──────────┘     └──────────┘     └──────────┘     └──────────┘
-                      │                 │
-                      ▼                 ▼
-                 (up to 5 rounds of tool-calling)
-```
+![Pattern 2: Agentic Function Calling](diagrams/ai_pattern_function_calling.png)
 
 **How it works:**
 1. User types a question in the AI Chat panel
@@ -145,29 +122,7 @@ Click "Diagnose" on any Deployment, StatefulSet, or DaemonSet, and the AI instan
 
 **How it works technically:**
 
-```
-User clicks "Diagnose" on my-app Deployment
-    │
-    ▼ Backend collects:
-    ├── Workload spec (replicas desired/ready, images, resource limits)
-    ├── Pod logs from up to 3 pods (all containers, truncated to 3000 chars each)
-    └── K8s events (last 15 events for this resource)
-    │
-    ▼ Backend calculates:
-    ├── Verdict: Healthy (100% ready) / Degraded (≥50%) / Critical (<50%)
-    ├── Replica advice (single replica = no HA warning)
-    │
-    ▼ Sends to Gemini with structured prompt requesting JSON:
-    ├── health_score (0-100, deducted per risk severity)
-    ├── verdict + color + icon
-    ├── summary (2-3 sentences)
-    ├── risks[] with severity + description + kubectl fix
-    ├── positive_signals[]
-    ├── replica_advice, rollout_advice, resource_advice
-    └── kubectl_hints[]
-    │
-    ▼ Frontend renders in a modal with color-coded sections
-```
+![AI Diagnose Flow](diagrams/flow_diagnose.png)
 
 **API:** `POST /api/ai/diagnose`
 **Pattern:** Direct Prompt
@@ -181,24 +136,7 @@ When something is broken, RCA goes deeper than Diagnose. It reads logs from ALL 
 
 **How it works technically:**
 
-```
-User clicks "RCA" on a failing workload
-    │
-    ▼ Backend collects (more data than Diagnose):
-    ├── Logs from ALL containers across up to 3 matching pods (4000 chars each)
-    │   └── Uses label selector: app={name_prefix} for best-effort matching
-    ├── K8s events (sorted by timestamp, last 20, with repeat counts)
-    └── Workload spec (images, limits, requests, replicas)
-    │
-    ▼ Sends to Gemini requesting structured Markdown:
-    ├── 🚨 Root Cause — 2-3 sentences with specific evidence
-    ├── 🔍 Evidence — exact log lines and events quoted with backticks
-    ├── 💥 Impact — what's broken, who's affected
-    ├── ✅ Remediation Steps — numbered, specific (kubectl commands, env vars, YAML fields)
-    └── 🛡️ Prevention — how to prevent this failure class
-    │
-    ▼ Frontend renders Markdown in the RCA modal
-```
+![AI RCA Flow](diagrams/flow_rca.png)
 
 **Key difference from Diagnose:** Diagnose gives a health snapshot (structured JSON). RCA gives an investigation narrative (structured Markdown) — more detail, more evidence, more actionable.
 
@@ -216,34 +154,7 @@ User clicks "RCA" on a failing workload
 
 **How Log Summarization works:**
 
-```
-Backend fetches pod logs (last N lines)
-    │
-    ▼ Sends to Gemini:
-    "Summarize these logs. Identify:
-     1. Error patterns with frequency
-     2. Warning trends
-     3. Root causes
-     4. Recommended actions"
-    │
-    ▼ Returns Markdown summary
-```
-
-**How Multi-Container Correlation works:**
-
-```
-Backend fetches logs from EVERY container in the pod:
-    ├── Init containers (ran before app started)
-    ├── App container (main application)
-    └── Sidecar containers (envoy proxy, log agents, etc.)
-    │
-    ▼ Sends ALL logs to Gemini in one prompt:
-    "These are logs from different containers in the SAME pod.
-     Find causal relationships across containers.
-     Identify which container caused the cascade."
-    │
-    ▼ Returns cross-container analysis
-```
+![AI Log Analysis Flow](diagrams/flow_log_analysis.png)
 
 **APIs:** `POST /api/ai/summarize_logs`, `POST /api/ai/correlate_logs`
 **Pattern:** Direct Prompt
@@ -257,34 +168,7 @@ Scans all workloads in your namespace, compares their actual CPU/memory usage ag
 
 **How it works technically:**
 
-```
-User clicks "Optimize" in the toolbar
-    │
-    ▼ Backend Step 1: Try to get REAL metrics
-    ├── Calls K8s metrics-server API (metrics.k8s.io/v1beta1)
-    │   └── Returns actual CPU (cores) and Memory (MiB) per pod
-    │
-    ▼ If metrics-server unavailable: Fall back to Gemini estimation
-    │   └── Gemini estimates usage based on image type (e.g., nginx ≈ 50m CPU)
-    │
-    ▼ Backend Step 2: For each workload, compute:
-    ├── Current CPU/Memory requests and limits
-    ├── Actual usage (measured or estimated)
-    ├── Billable cores = max(cpu_requests, actual_usage)
-    ├── Current monthly cost = billable_cores × €60/core/month
-    ├── Capacity headroom (% unused capacity before hitting limits)
-    │
-    ▼ Backend Step 3: Send per-workload data to Gemini
-    ├── Gemini suggests right-sized request/limit values
-    ├── Calculates recommended monthly cost and savings
-    ├── Flags: "Cost Saving" / "Performance Risk" / "Stability Risk" / "Right-Sized"
-    │
-    ▼ Returns:
-    ├── Per-workload recommendations with severity badges
-    ├── Total current monthly cost vs. recommended cost
-    ├── Total monthly savings
-    └── Whether data came from metrics-server or Gemini estimation
-```
+![AI Resource Optimizer Flow](diagrams/flow_optimizer.png)
 
 **Cost model:** €60 EUR per CPU core per month (configurable per org). Memory is tracked for OOM risk but not separately billed.
 
@@ -335,27 +219,7 @@ Type natural language into the search bar — "show me crashing pods", "scale fr
 
 **How it works technically:**
 
-```
-User types: "show me pods with high restarts"
-    │
-    ▼ Backend collects live cluster inventory:
-    ├── All Deployments (name, image, ready/desired, limits, Helm chart)
-    ├── All StatefulSets
-    ├── All Pods (name, status, restarts, waiting reasons)
-    └── All Services (name, type, ports)
-    │
-    ▼ Sends to Gemini with intent classification prompt:
-    "Classify this query into one of these actions:
-     filter, scale, logs, delete, describe, analyze,
-     restart, events, reset, vuln_scan, optimize, chat"
-    │
-    ▼ Gemini returns structured JSON action:
-    { "action": "filter", "target": "Pod",
-      "criteria": { "status": "CrashLoopBackOff" } }
-    │
-    ▼ Frontend executes the action:
-    └── Filters the workloads table to show only crashing pods
-```
+![Ask AI / Natural Language Search Flow](diagrams/flow_ask_ai.png)
 
 **Supported actions:** filter workloads, scale replicas, show logs, delete resources, describe/analyze workloads, restart, show events, vulnerability scan, resource optimization, and conversational chat fallback.
 
@@ -395,33 +259,7 @@ One click scans ALL workloads in your namespace for security risks: privileged c
 
 **How it works technically:**
 
-```
-User clicks "Security Audit" in the Security tab
-    │
-    ▼ Backend collects specs from ALL resource kinds:
-    ├── Deployments, StatefulSets, DaemonSets, Jobs, Pods
-    │   └── For each: host_pid, host_network, host_ipc, security_context,
-    │       privileged mode, capabilities, readOnly rootfs, service account,
-    │       host path volumes, readiness/liveness probes, resource limits
-    ├── ServiceAccounts
-    ├── NetworkPolicies
-    └── RBAC RoleBindings
-    │
-    ▼ Backend builds a comprehensive inventory (text format)
-    │
-    ▼ Sends to Gemini with CIS-Benchmark-aligned prompt:
-    "Audit this namespace inventory against CIS Kubernetes Benchmark.
-     Return structured JSON with:
-     - executive_summary
-     - severity_counts (Critical/High/Medium/Low/Info)
-     - risks[] with: severity, category, resource, kind, issue,
-       remediation, cve_references, ai_insight"
-    │
-    ▼ Frontend renders:
-    ├── Severity breakdown bar chart
-    ├── Executive summary
-    └── Risk table with expandable details
-```
+![Security Audit Flow](diagrams/flow_security_audit.png)
 
 **Risk categories:** Pod Security, RBAC, Network Policies, Container Security, Image Security, Resource Management
 
@@ -437,34 +275,7 @@ When a workload is failing (CrashLoopBackOff, OOMKilled, ImagePullBackOff), Self
 
 **How it works technically:**
 
-```
-User clicks "Self-Heal" on a failing workload
-    │
-    ▼ Backend collects diagnostics:
-    ├── Pod logs (last 80 lines, tries previous container first)
-    ├── K8s events (last 10 related events)
-    └── Current resource limits and image
-    │
-    ▼ Sends to Gemini with action-specific rules:
-    ├── OOMKilled → action: patch_resources (double the limit)
-    ├── ImagePullBackOff → action: patch_image (fix typo/missing secret)
-    ├── CrashLoopBackOff → action: restart (or config fix if obvious)
-    ├── Pending >5min → action: patch_selector
-    └── Stable-then-broken → action: rollback
-    │
-    ▼ Returns:
-    {
-      "root_cause": "Container OOMKilled — 256Mi limit exceeded",
-      "confidence": 92,
-      "action": "patch_resources",
-      "action_label": "Increase Memory to 512Mi",
-      "risk_level": "medium",
-      "patch_preview": "kubectl set resources deploy/my-app -c app --limits=memory=512Mi",
-      "kubectl_hints": [...]
-    }
-    │
-    ▼ Frontend shows diagnose card + action button
-```
+![AI Self-Heal Flow](diagrams/flow_self_heal.png)
 
 **API:** `POST /api/ai/self_heal`
 **Pattern:** Direct Prompt
@@ -478,20 +289,7 @@ Describe what you need in English — "create a Redis deployment with 2 replicas
 
 **How it works technically:**
 
-```
-User types: "nginx deployment with 3 replicas, port 80"
-    │
-    ▼ Sent to Gemini with production-quality rules:
-    "Generate K8s YAML with:
-     - Resource limits and requests
-     - Security context (runAsNonRoot, readOnlyRootFilesystem)
-     - Health probes
-     - Labels and annotations"
-    │
-    ▼ Returns valid YAML
-    │
-    ▼ Frontend shows YAML in a code block with copy button
-```
+![YAML Generation Flow](diagrams/flow_yaml_gen.png)
 
 **API:** `POST /api/ai/generate_yaml`
 **Pattern:** Direct Prompt
