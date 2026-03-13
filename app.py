@@ -95,7 +95,6 @@ def _prewarm_model():
 threading.Thread(target=_prewarm_model, daemon=True).start()
 
 import re, time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ── In-memory TTL cache for expensive AI endpoints ───────────────────────────
 # Caches Gemini responses for 5 minutes to avoid re-querying on repeated clicks.
@@ -1512,38 +1511,29 @@ def security_scan():
         rbac_v1  = client.RbacAuthorizationV1Api()
         net_v1   = client.NetworkingV1Api()
 
-        # ── 1. Collect raw specs — PARALLEL to speed up GDC network ──────────
+        # ── 1. Collect raw specs from ALL resource kinds ─────────────────────
+        # NOTE: Sequential calls (not ThreadPoolExecutor) because the app uses
+        # gevent.monkey.patch_all() which conflicts with ThreadPoolExecutor's
+        # internal threading primitives, causing deadlocks on GDC.
+        # The TTL cache above is what provides the real speedup.
         inventory_sections = []
-        k8s_results = {}
 
-        def _fetch(label, fn):
+        def _safe_list(fn):
             try:
-                return (label, fn())
+                return fn()
             except Exception:
-                return (label, [])
+                return []
 
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            futures = [
-                pool.submit(_fetch, 'deploys', lambda: apps_v1.list_namespaced_deployment(namespace).items),
-                pool.submit(_fetch, 'stateful', lambda: apps_v1.list_namespaced_stateful_set(namespace).items),
-                pool.submit(_fetch, 'daemons', lambda: apps_v1.list_namespaced_daemon_set(namespace).items),
-                pool.submit(_fetch, 'pods', lambda: core_v1.list_namespaced_pod(namespace).items),
-                pool.submit(_fetch, 'jobs', lambda: batch_v1.list_namespaced_job(namespace).items),
-                pool.submit(_fetch, 'sas', lambda: core_v1.list_namespaced_service_account(namespace).items),
-                pool.submit(_fetch, 'netpols', lambda: net_v1.list_namespaced_network_policy(namespace).items),
-                pool.submit(_fetch, 'rbs', lambda: rbac_v1.list_namespaced_role_binding(namespace).items),
-                pool.submit(_fetch, 'cms', lambda: core_v1.list_namespaced_config_map(namespace).items),
-                pool.submit(_fetch, 'secrets', lambda: core_v1.list_namespaced_secret(namespace).items),
-            ]
-            for f in as_completed(futures):
-                label, items = f.result()
-                k8s_results[label] = items
-
-        deploys  = k8s_results.get('deploys', [])
-        stateful = k8s_results.get('stateful', [])
-        daemons  = k8s_results.get('daemons', [])
-        pods     = k8s_results.get('pods', [])
-        jobs     = k8s_results.get('jobs', [])
+        deploys  = _safe_list(lambda: apps_v1.list_namespaced_deployment(namespace).items)
+        stateful = _safe_list(lambda: apps_v1.list_namespaced_stateful_set(namespace).items)
+        daemons  = _safe_list(lambda: apps_v1.list_namespaced_daemon_set(namespace).items)
+        pods     = _safe_list(lambda: core_v1.list_namespaced_pod(namespace).items)
+        jobs     = _safe_list(lambda: batch_v1.list_namespaced_job(namespace).items)
+        sas      = _safe_list(lambda: core_v1.list_namespaced_service_account(namespace).items)
+        netpols  = _safe_list(lambda: net_v1.list_namespaced_network_policy(namespace).items)
+        rbs      = _safe_list(lambda: rbac_v1.list_namespaced_role_binding(namespace).items)
+        cms      = _safe_list(lambda: core_v1.list_namespaced_config_map(namespace).items)
+        secrets  = _safe_list(lambda: core_v1.list_namespaced_secret(namespace).items)
 
         def _workload_summary(w):
             """Summarise a workload object as compact YAML-like text."""
@@ -1624,7 +1614,6 @@ def security_scan():
             inventory_sections.append("\n".join(j_lines))
 
         # ServiceAccounts
-        sas = k8s_results.get('sas', [])
         if sas:
             sa_lines = ["=== ServiceAccounts ==="]
             for sa in sas:
@@ -1633,7 +1622,6 @@ def security_scan():
             inventory_sections.append("\n".join(sa_lines))
 
         # NetworkPolicies
-        netpols = k8s_results.get('netpols', [])
         if netpols:
             np_lines = ["=== NetworkPolicies ==="]
             for np in netpols:
@@ -1643,7 +1631,6 @@ def security_scan():
             inventory_sections.append("=== NetworkPolicies ===\n  NONE — all pod-to-pod traffic is unrestricted")
 
         # RBAC — RoleBindings
-        rbs = k8s_results.get('rbs', [])
         if rbs:
             rb_lines = ["=== RoleBindings (namespace-scoped) ==="]
             for rb in rbs:
@@ -1652,7 +1639,6 @@ def security_scan():
             inventory_sections.append("\n".join(rb_lines))
 
         # ConfigMaps — check for embedded credentials, certs, risky keys
-        cms = k8s_results.get('cms', [])
         if cms:
             cm_lines = ["=== ConfigMaps ==="]
             for cm in cms:
@@ -1671,7 +1657,6 @@ def security_scan():
             inventory_sections.append("\n".join(cm_lines))
 
         # Secrets — metadata only (never log values); check types and naming
-        secrets = k8s_results.get('secrets', [])
         if secrets:
             sec_lines = ["=== Secrets ==="]
             for s in secrets:
