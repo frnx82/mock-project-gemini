@@ -1778,20 +1778,85 @@ severity_counts must match the actual counts in the risks array.
 Return ONLY the JSON. No markdown fences. No prose.
 
 === CLUSTER INVENTORY ===
-{full_inventory[:22000]}
+{full_inventory[:12000]}
 """
-        response = gemini_generate_with_retry(prompt)
-        result = parse_gemini_json(response.text)
-        result.setdefault("executive_summary", "Audit complete.")
-        result.setdefault("severity_counts", {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0})
-        result.setdefault("risks", [])
-        _cache_set(cache_key, result)
-        return jsonify(result)
+        # ── Gemini call with retry on malformed JSON ─────────────────────
+        result = None
+        for _attempt in range(2):
+            response = gemini_generate_with_retry(prompt)
+            raw = response.text if response else ''
+            if not raw or not raw.strip():
+                print(f"[security_scan] Gemini returned empty response (attempt {_attempt+1})")
+                if _attempt == 0:
+                    import time as _t; _t.sleep(2)
+                    continue
+                # Both attempts empty — fall back to deterministic scan
+                break
 
-    except json.JSONDecodeError as e:
-        print(f"[security_scan] Gemini returned non-JSON: {e}")
-        return jsonify({"executive_summary": "AI returned malformed output. Try re-running the scan.",
-                        "severity_counts": {}, "risks": []})
+            try:
+                result = parse_gemini_json(raw)
+                break  # Success
+            except (json.JSONDecodeError, ValueError) as je:
+                print(f"[security_scan] JSON parse failed (attempt {_attempt+1}): {je}")
+                if _attempt == 0:
+                    import time as _t; _t.sleep(2)
+                    # Retry with even shorter inventory
+                    prompt = prompt.replace(full_inventory[:12000], full_inventory[:6000])
+                    continue
+                break  # Give up
+
+        if result:
+            result.setdefault("executive_summary", "Audit complete.")
+            result.setdefault("severity_counts", {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0})
+            result.setdefault("risks", [])
+            _cache_set(cache_key, result)
+            return jsonify(result)
+
+        # ── All attempts failed — fall back to deterministic checks ──────
+        print("[security_scan] Falling back to deterministic security checks")
+        risks = []
+        for d in deploys:
+            name = d.metadata.name
+            spec = d.spec.template.spec
+            if getattr(spec, 'host_pid', False) or getattr(spec, 'host_ipc', False) or getattr(spec, 'host_network', False):
+                risks.append({"resource": name, "kind": "Deployment", "severity": "Critical",
+                              "category": "Pod Security", "issue": "Host namespace sharing (PID/IPC/Network)",
+                              "remediation": "Set hostPID: false, hostIPC: false, hostNetwork: false",
+                              "cve_references": ["CIS-5.2.4"], "ai_insight": "Host namespace sharing gives container access to host-level resources."})
+            for c in (spec.containers or []):
+                sc = getattr(c, 'security_context', None)
+                if sc and getattr(sc, 'privileged', False):
+                    risks.append({"resource": name, "kind": "Deployment", "severity": "Critical",
+                                  "category": "Pod Security", "issue": f"Container '{c.name}' is privileged",
+                                  "remediation": "Remove securityContext.privileged: true",
+                                  "cve_references": ["CIS-5.2.1"], "ai_insight": "Privileged containers have unrestricted host access."})
+                if c.image and (':latest' in c.image or ':' not in c.image.split('/')[-1]):
+                    risks.append({"resource": name, "kind": "Deployment", "severity": "Medium",
+                                  "category": "Image Security", "issue": f"Container '{c.name}' uses ':latest' or untagged image: {c.image}",
+                                  "remediation": "Pin image to a specific version tag",
+                                  "cve_references": ["CIS-5.5.1"], "ai_insight": "Untagged images are unpredictable and cannot be audited for supply chain integrity."})
+                res = getattr(c, 'resources', None)
+                if not res or not getattr(res, 'limits', None):
+                    risks.append({"resource": name, "kind": "Deployment", "severity": "Medium",
+                                  "category": "Resource Management", "issue": f"Container '{c.name}' missing resource limits",
+                                  "remediation": "Define resources.limits.cpu and resources.limits.memory",
+                                  "cve_references": ["CIS-5.2.5"], "ai_insight": "Missing limits allow unbounded resource consumption."})
+        if not netpols:
+            risks.append({"resource": "namespace", "kind": "NetworkPolicy", "severity": "High",
+                          "category": "Network Policy", "issue": "No NetworkPolicies — all pod-to-pod traffic is unrestricted",
+                          "remediation": f"kubectl apply -f default-deny.yaml -n {namespace}",
+                          "cve_references": ["CIS-5.3.2"], "ai_insight": "Without network policies, any compromised pod can reach all others."})
+        counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
+        for r in risks:
+            counts[r.get("severity", "Info")] = counts.get(r.get("severity", "Info"), 0) + 1
+        fallback_result = {
+            "executive_summary": f"Found {len(risks)} issues across {len(deploys)} deployments. (AI unavailable — deterministic checks only.)",
+            "severity_counts": counts,
+            "risks": risks
+        }
+        _cache_set(cache_key, fallback_result)
+        return jsonify(fallback_result)
+
     except Exception as e:
         print(f"[security_scan] Error: {e}")
         return jsonify({'error': str(e)}), 500
