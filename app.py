@@ -94,7 +94,11 @@ def _prewarm_model():
 threading.Thread(target=_prewarm_model, daemon=True).start()
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'gdc-dashboard-default-secret-key-change-me')
+
+# SocketIO with relaxed ping settings for corporate proxies / CIDP auth
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent',
+                    ping_timeout=120, ping_interval=30)
 
 try:
     config.load_incluster_config()
@@ -129,6 +133,18 @@ def _k8s_retry(fn, *args, **kwargs):
 def api_ping():
     """Ultra-lightweight keepalive — no K8s call, just proves the worker is alive."""
     return 'ok', 200
+
+
+@app.route('/api/auth/status')
+def api_auth_status():
+    """Auth status check — if CIDP session is expired, the CIDP proxy will
+    intercept this request and redirect to login (302/401) before it ever
+    reaches this handler.  A successful JSON response proves auth is valid."""
+    import datetime
+    return jsonify({
+        'authenticated': True,
+        'ts': datetime.datetime.utcnow().isoformat()
+    })
 
 
 @app.route('/')

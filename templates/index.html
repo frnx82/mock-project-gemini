@@ -2155,20 +2155,64 @@
 
     <!-- Log Modal -->
     <div id="logModal" class="modal">
-        <div class="modal-content" style="width: 80%; max-width: 900px;">
+        <div class="modal-content" style="width: 85%; max-width: 1000px;">
             <span class="close" onclick="closeModal('logModal')">&times;</span>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <h2 id="modal-title" style="margin: 0;">Logs</h2>
-                <button class="btn btn-default" style="border-color: #6f42c1; color: #6f42c1; background: #fff;"
+                <button id="log-summarize-btn" class="btn btn-default"
+                    style="border-color: #6f42c1; color: #6f42c1; background: #fff; display:flex; align-items:center; gap:6px;"
                     onclick="summarizeLogs()">
-                    ✨ Summarize
+                    ✨ AI Summarize
                 </button>
             </div>
 
+            <!-- AI Summary Panel -->
             <div id="log-summary-box"
-                style="display: none; background: #f0f0ff; border: 1px solid #d0d0ff; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                <h4 style="margin: 0 0 10px 0; color: #6f42c1;">✨ AI Log Summary</h4>
-                <div id="log-summary-content">Loading...</div>
+                style="display: none; background: linear-gradient(135deg,#f8f0ff,#fff0f8); border: 1px solid #d0a0e0; padding: 16px; border-radius: 10px; margin-bottom: 15px;">
+
+                <!-- Loading state -->
+                <div id="log-summary-loading" style="text-align:center; padding:16px 0;">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+                        <div style="border:3px solid #e0d0f0; border-top:3px solid #6f42c1; border-radius:50%;
+                            width:24px; height:24px; animation:spin 1s linear infinite;"></div>
+                        <span style="font-size:14px; color:#6f42c1; font-weight:600;">Gemini is analyzing logs...</span>
+                    </div>
+                </div>
+
+                <!-- Content state -->
+                <div id="log-summary-content" style="display:none;">
+                    <!-- Header with health badge -->
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <span style="font-size:18px;">🤖</span>
+                        <strong style="color:#6f42c1; font-size:15px;">Gemini Log Analysis</strong>
+                        <span
+                            style="font-size:11px; background:#6f42c1; color:white; border-radius:20px; padding:2px 8px;">AI
+                            Powered</span>
+                        <span id="log-health-badge"
+                            style="margin-left:auto; font-size:12px; font-weight:600; padding:3px 10px; border-radius:12px;"></span>
+                    </div>
+
+                    <!-- Summary text -->
+                    <div id="log-summary-text" style="font-size:13px; color:#333; line-height:1.6; background:rgba(255,255,255,0.7);
+                        border-radius:8px; padding:10px 12px; margin-bottom:12px;"></div>
+
+                    <!-- Errors section -->
+                    <div id="log-errors-section" style="display:none; margin-bottom:12px;">
+                        <div style="font-weight:600; font-size:12px; color:#dc3545; margin-bottom:6px;">⚠️ Errors &
+                            Warnings Found</div>
+                        <div id="log-errors-list"
+                            style="font-size:12px; font-family:'Fira Code',monospace; background:#fff5f5;
+                            border-radius:6px; padding:10px; max-height:120px; overflow-y:auto; color:#c00; border-left:3px solid #dc3545;">
+                        </div>
+                    </div>
+
+                    <!-- Recommendations section -->
+                    <div id="log-recs-section" style="display:none; margin-bottom:8px;">
+                        <div style="font-weight:600; font-size:12px; color:#28a745; margin-bottom:6px;">✅
+                            Recommendations</div>
+                        <div id="log-recs-list" style="font-size:12px; color:#333;"></div>
+                    </div>
+                </div>
             </div>
 
             <pre id="log-content"
@@ -4211,11 +4255,116 @@
             document.getElementById('logModal').style.display = 'block';
             document.getElementById('modal-title').innerText = `Logs: ${podName}`;
             document.getElementById('log-content').innerText = "Loading...";
+            // Reset summary panel on every open
+            document.getElementById('log-summary-box').style.display = 'none';
+            document.getElementById('log-summary-loading').style.display = 'block';
+            document.getElementById('log-summary-content').style.display = 'none';
+            const btn = document.getElementById('log-summarize-btn');
+            if (btn) { btn.disabled = false; btn.innerHTML = '✨ AI Summarize'; }
             const ns = document.getElementById('namespace-select').value;
             fetch(`/api/pods/${podName}/logs?namespace=${ns}`)
                 .then(r => r.json())
                 .then(d => document.getElementById('log-content').innerText = d.logs || d.error)
                 .catch(e => document.getElementById('log-content').innerText = e);
+        }
+
+        async function summarizeLogs() {
+            // Extract pod name from modal title "Logs: pod-name-xyz"
+            const title = document.getElementById('modal-title').innerText;
+            const podName = title.replace(/^Logs:\s*/, '').trim();
+            const ns = document.getElementById('namespace-select').value;
+
+            if (!podName) {
+                showToast('❌ No pod name found', false);
+                return;
+            }
+
+            // Show loading state
+            const summaryBox = document.getElementById('log-summary-box');
+            const loadingDiv = document.getElementById('log-summary-loading');
+            const contentDiv = document.getElementById('log-summary-content');
+            const btn = document.getElementById('log-summarize-btn');
+
+            summaryBox.style.display = 'block';
+            loadingDiv.style.display = 'block';
+            contentDiv.style.display = 'none';
+            if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Analyzing...'; }
+
+            try {
+                const response = await fetch('/api/ai/summarize_logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pod_name: podName, namespace: ns })
+                });
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error);
+
+                // Hide loading, show content
+                loadingDiv.style.display = 'none';
+                contentDiv.style.display = 'block';
+
+                // Health badge
+                const healthBadge = document.getElementById('log-health-badge');
+                const status = (data.health_status || 'UNKNOWN').toUpperCase();
+                const badgeColors = {
+                    'HEALTHY': { bg: '#d4edda', color: '#155724', icon: '✅' },
+                    'DEGRADED': { bg: '#fff3cd', color: '#856404', icon: '⚠️' },
+                    'FAILING': { bg: '#f8d7da', color: '#721c24', icon: '🔴' },
+                    'UNKNOWN': { bg: '#e9ecef', color: '#495057', icon: '❓' }
+                };
+                const badge = badgeColors[status] || badgeColors['UNKNOWN'];
+                healthBadge.innerHTML = `${badge.icon} ${status}`;
+                healthBadge.style.background = badge.bg;
+                healthBadge.style.color = badge.color;
+
+                // Summary text
+                document.getElementById('log-summary-text').innerText = data.summary || 'No summary available.';
+
+                // Errors section
+                const errorsSection = document.getElementById('log-errors-section');
+                const errorsList = document.getElementById('log-errors-list');
+                if (data.errors && data.errors.length > 0) {
+                    errorsSection.style.display = 'block';
+                    errorsList.innerHTML = data.errors
+                        .map(e => `<div style="padding:3px 0; border-bottom:1px solid #ffe0e0;">• ${e.replace(/</g, '&lt;')}</div>`)
+                        .join('');
+                } else {
+                    errorsSection.style.display = 'none';
+                }
+
+                // Recommendations section
+                const recsSection = document.getElementById('log-recs-section');
+                const recsList = document.getElementById('log-recs-list');
+                if (data.recommendations && data.recommendations.length > 0) {
+                    recsSection.style.display = 'block';
+                    recsList.innerHTML = data.recommendations
+                        .map((r, i) => {
+                            const isKubectl = r.trim().startsWith('kubectl');
+                            return `<div style="padding:4px 0; display:flex; gap:6px; align-items:flex-start;">
+                                <span style="color:#28a745; font-weight:700;">${i + 1}.</span>
+                                ${isKubectl
+                                    ? `<code style="background:#f0f0f0; padding:2px 6px; border-radius:4px; font-size:11px; word-break:break-all;">${r.replace(/</g, '&lt;')}</code>`
+                                    : `<span>${r.replace(/</g, '&lt;')}</span>`
+                                }
+                            </div>`;
+                        }).join('');
+                } else {
+                    recsSection.style.display = 'none';
+                }
+
+                // Reset button
+                if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Re-analyze'; }
+
+            } catch (err) {
+                loadingDiv.style.display = 'none';
+                contentDiv.style.display = 'block';
+                document.getElementById('log-summary-text').innerText = '❌ Error: ' + err.message;
+                document.getElementById('log-errors-section').style.display = 'none';
+                document.getElementById('log-recs-section').style.display = 'none';
+                document.getElementById('log-health-badge').innerHTML = '';
+                if (btn) { btn.disabled = false; btn.innerHTML = '✨ AI Summarize'; }
+            }
         }
 
         function openEnvModal(name, type) {
@@ -5256,42 +5405,120 @@
             const tab = hash && hash.match(/[#&]tab=([^&]+)/);
             if (tab && tab[1]) switchMainTab(tab[1]);
         })();
-        // ── Stale-session auto-recovery ───────────────────────────────────
-        // 1. Page Visibility: refresh data immediately when tab becomes active again
+        // ── CIDP-Aware Session Recovery ──────────────────────────────────
+        // Detects CIDP session expiry (302 redirect to login / 401 / HTML response)
+        // and auto-reloads or shows a re-authenticate banner.
+
+        let _authFailed = false;
+
+        function _showAuthBanner() {
+            if (document.getElementById('auth-expiry-banner')) return;
+            _authFailed = true;
+            const banner = document.createElement('div');
+            banner.id = 'auth-expiry-banner';
+            banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99999; background:linear-gradient(135deg,#dc3545,#c82333); color:white; padding:12px 20px; display:flex; align-items:center; justify-content:center; gap:12px; font-size:14px; font-weight:600; box-shadow:0 2px 12px rgba(0,0,0,0.3);';
+            banner.innerHTML = `
+                <span>⚠️ Your session has expired. Data is no longer updating.</span>
+                <button onclick="window.location.reload()"
+                    style="background:white; color:#dc3545; border:none; padding:6px 16px; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px;">
+                    🔄 Re-authenticate
+                </button>
+                <button onclick="this.parentElement.remove()"
+                    style="background:transparent; color:rgba(255,255,255,0.8); border:1px solid rgba(255,255,255,0.4); padding:4px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
+                    Dismiss
+                </button>`;
+            document.body.prepend(banner);
+        }
+
+        async function _checkAuth() {
+            try {
+                const res = await _origFetch('/api/auth/status');
+                // CIDP redirected to login page (fetch follows 302, returns HTML)
+                if (res.redirected) {
+                    console.warn('[auth] CIDP redirected — session expired');
+                    return false;
+                }
+                if (res.status === 401 || res.status === 403) {
+                    console.warn('[auth] Got ' + res.status + ' — session expired');
+                    return false;
+                }
+                const ct = res.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    console.warn('[auth] Non-JSON response — likely CIDP login page');
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                console.warn('[auth] Auth check failed:', e.message);
+                return false;  // network error — assume expired
+            }
+        }
+
+        // 1. Page Visibility: refresh data + check auth when tab becomes active
         let _hiddenAt = null;
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 _hiddenAt = Date.now();
             } else {
-                // If tab was hidden for more than 60 seconds, refresh now
                 if (_hiddenAt && (Date.now() - _hiddenAt) > 60000) {
-                    console.log('[recovery] Tab active after idle — refreshing data');
-                    fetchData();
+                    console.log('[recovery] Tab active after idle — checking auth & refreshing');
+                    _checkAuth().then(ok => {
+                        if (ok) {
+                            _authFailed = false;
+                            const banner = document.getElementById('auth-expiry-banner');
+                            if (banner) banner.remove();
+                            fetchData();
+                        } else {
+                            _showAuthBanner();
+                        }
+                    });
                 }
                 _hiddenAt = null;
             }
         });
 
-        // 2. Heartbeat: ping the backend every 90 seconds to keep the worker alive
-        //    (well within the gunicorn 300s worker timeout)
-        setInterval(() => {
-            fetch('/api/ping').catch(() => {
-                // If ping fails, attempt a full data refresh to re-establish
-                console.warn('[recovery] Heartbeat failed — attempting reconnect');
-                fetchData().catch(() => { });
-            });
-        }, 90 * 1000);
+        // 2. Auth-aware heartbeat: check CIDP session every 4 minutes
+        //    (well within typical 15-min CIDP cookie timeout)
+        setInterval(async () => {
+            const ok = await _checkAuth();
+            if (!ok) {
+                console.warn('[auth] Heartbeat detected expired session');
+                _showAuthBanner();
+            } else if (_authFailed) {
+                // Session recovered (user re-authenticated in another tab)
+                _authFailed = false;
+                const banner = document.getElementById('auth-expiry-banner');
+                if (banner) banner.remove();
+                console.log('[auth] Session recovered — resuming data refresh');
+                fetchData();
+            }
+        }, 4 * 60 * 1000);  // 4 minutes
 
-        // 3. Fetch retry wrapper: retry up to 3× with exponential back-off on
-        //    network errors or 5xx (handles gunicorn worker restarts gracefully)
+        // 3. Fetch retry wrapper: handles 5xx retries + CIDP auth detection
         const _origFetch = window.fetch;
         window.fetch = async function (url, opts) {
             const delays = [1500, 3000, 6000];
             for (let attempt = 0; attempt <= delays.length; attempt++) {
                 try {
                     const res = await _origFetch(url, opts);
+
+                    // Detect CIDP auth redirect (fetch follows 302 → returns login HTML)
+                    if (typeof url === 'string' && url.startsWith('/api/')) {
+                        if (res.redirected || res.status === 401 || res.status === 403) {
+                            console.warn(`[auth] API ${url} returned auth failure (${res.status}, redirected=${res.redirected})`);
+                            _showAuthBanner();
+                            return res;
+                        }
+                        // Check if we got HTML instead of JSON (CIDP login page)
+                        const ct = res.headers.get('content-type') || '';
+                        if (ct.includes('text/html') && !url.includes('/api/ping')) {
+                            console.warn(`[auth] API ${url} returned HTML — likely CIDP login page`);
+                            _showAuthBanner();
+                            return res;
+                        }
+                    }
+
                     if (res.status >= 500 && attempt < delays.length) {
-                        // Server error — wait and retry
                         console.warn(`[recovery] Server error ${res.status} for ${url} (attempt ${attempt + 1}) — retrying in ${delays[attempt]}ms`);
                         await new Promise(r => setTimeout(r, delays[attempt]));
                         continue;
@@ -5299,7 +5526,6 @@
                     return res;
                 } catch (err) {
                     if (attempt < delays.length) {
-                        // Network error (ECONNRESET, worker restart, etc.) — retry with back-off
                         console.warn(`[recovery] Fetch failed for ${url} (attempt ${attempt + 1}): ${err.message} — retrying in ${delays[attempt]}ms`);
                         await new Promise(r => setTimeout(r, delays[attempt]));
                     } else {
@@ -5766,9 +5992,126 @@
                 .then(d => {
                     if (d.error) { m.done(`<p style="color:#dc3545">Error: ${d.error}</p>`); return; }
                     const logs = (d.logs || '(no logs)').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    m.done(`<pre style="background:#1e1e1e;color:#d4d4d4;padding:14px;border-radius:8px;overflow:auto;font-size:12px;max-height:440px;white-space:pre-wrap;word-break:break-all">${logs}</pre>`);
+                    // Build content with Summarize button + AI panel + logs
+                    const html = `
+                        <div style="display:flex; justify-content:flex-end; margin-bottom:10px; gap:8px;">
+                            <button id="ml-summarize-btn" onclick="summarizeMultiLogs('${podName.replace(/'/g, "\\'")}')"
+                                style="border:1px solid #6f42c1; color:#6f42c1; background:#fff; padding:6px 14px;
+                                border-radius:6px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                                ✨ AI Summarize
+                            </button>
+                        </div>
+                        <div id="ml-summary-panel" style="display:none; background:linear-gradient(135deg,#f8f0ff,#fff0f8);
+                            border:1px solid #d0a0e0; border-radius:10px; padding:16px; margin-bottom:12px;">
+                            <div id="ml-summary-loading" style="text-align:center; padding:12px 0;">
+                                <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+                                    <div style="border:3px solid #e0d0f0; border-top:3px solid #6f42c1; border-radius:50%;
+                                        width:22px; height:22px; animation:spin 1s linear infinite;"></div>
+                                    <span style="font-size:13px; color:#6f42c1; font-weight:600;">Gemini is analyzing logs...</span>
+                                </div>
+                            </div>
+                            <div id="ml-summary-result" style="display:none;">
+                                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                                    <span style="font-size:16px;">🤖</span>
+                                    <strong style="color:#6f42c1; font-size:14px;">Gemini Log Analysis</strong>
+                                    <span style="font-size:10px; background:#6f42c1; color:white; border-radius:20px; padding:2px 8px;">AI Powered</span>
+                                    <span id="ml-health-badge" style="margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:12px;"></span>
+                                </div>
+                                <div id="ml-summary-text" style="font-size:13px; color:#333; line-height:1.6;
+                                    background:rgba(255,255,255,0.7); border-radius:8px; padding:10px 12px; margin-bottom:10px;"></div>
+                                <div id="ml-errors-section" style="display:none; margin-bottom:10px;">
+                                    <div style="font-weight:600; font-size:12px; color:#dc3545; margin-bottom:6px;">⚠️ Errors & Warnings</div>
+                                    <div id="ml-errors-list" style="font-size:12px; font-family:'Fira Code',monospace; background:#fff5f5;
+                                        border-radius:6px; padding:10px; max-height:100px; overflow-y:auto; color:#c00; border-left:3px solid #dc3545;"></div>
+                                </div>
+                                <div id="ml-recs-section" style="display:none;">
+                                    <div style="font-weight:600; font-size:12px; color:#28a745; margin-bottom:6px;">✅ Recommendations</div>
+                                    <div id="ml-recs-list" style="font-size:12px; color:#333;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <pre style="background:#1e1e1e;color:#d4d4d4;padding:14px;border-radius:8px;overflow:auto;font-size:12px;max-height:400px;white-space:pre-wrap;word-break:break-all">${logs}</pre>`;
+                    m.done(html);
                 })
                 .catch(e => m.done(`<p style="color:#dc3545">Error: ${e.message}</p>`));
+        }
+
+        async function summarizeMultiLogs(podName) {
+            const ns = document.getElementById('namespace-select').value;
+            const panel = document.getElementById('ml-summary-panel');
+            const loading = document.getElementById('ml-summary-loading');
+            const result = document.getElementById('ml-summary-result');
+            const btn = document.getElementById('ml-summarize-btn');
+
+            panel.style.display = 'block';
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Analyzing...'; }
+
+            try {
+                const resp = await fetch('/api/ai/summarize_logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pod_name: podName, namespace: ns })
+                });
+                const data = await resp.json();
+                if (data.error) throw new Error(data.error);
+
+                loading.style.display = 'none';
+                result.style.display = 'block';
+
+                // Health badge
+                const badge = document.getElementById('ml-health-badge');
+                const status = (data.health_status || 'UNKNOWN').toUpperCase();
+                const colors = {
+                    'HEALTHY': { bg: '#d4edda', color: '#155724', icon: '✅' },
+                    'DEGRADED': { bg: '#fff3cd', color: '#856404', icon: '⚠️' },
+                    'FAILING': { bg: '#f8d7da', color: '#721c24', icon: '🔴' },
+                    'UNKNOWN': { bg: '#e9ecef', color: '#495057', icon: '❓' }
+                };
+                const c = colors[status] || colors['UNKNOWN'];
+                badge.innerHTML = `${c.icon} ${status}`;
+                badge.style.background = c.bg;
+                badge.style.color = c.color;
+
+                // Summary
+                document.getElementById('ml-summary-text').innerText = data.summary || 'No summary available.';
+
+                // Errors
+                const errSec = document.getElementById('ml-errors-section');
+                const errList = document.getElementById('ml-errors-list');
+                if (data.errors && data.errors.length > 0) {
+                    errSec.style.display = 'block';
+                    errList.innerHTML = data.errors.map(e =>
+                        `<div style="padding:3px 0; border-bottom:1px solid #ffe0e0;">• ${e.replace(/</g, '&lt;')}</div>`
+                    ).join('');
+                } else { errSec.style.display = 'none'; }
+
+                // Recommendations
+                const recSec = document.getElementById('ml-recs-section');
+                const recList = document.getElementById('ml-recs-list');
+                if (data.recommendations && data.recommendations.length > 0) {
+                    recSec.style.display = 'block';
+                    recList.innerHTML = data.recommendations.map((r, i) => {
+                        const isCmd = r.trim().startsWith('kubectl');
+                        return `<div style="padding:3px 0; display:flex; gap:6px;">
+                            <span style="color:#28a745; font-weight:700;">${i + 1}.</span>
+                            ${isCmd ? `<code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:11px;">${r.replace(/</g, '&lt;')}</code>`
+                                : `<span>${r.replace(/</g, '&lt;')}</span>`}
+                        </div>`;
+                    }).join('');
+                } else { recSec.style.display = 'none'; }
+
+                if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Re-analyze'; }
+            } catch (err) {
+                loading.style.display = 'none';
+                result.style.display = 'block';
+                document.getElementById('ml-summary-text').innerText = '❌ Error: ' + err.message;
+                document.getElementById('ml-errors-section').style.display = 'none';
+                document.getElementById('ml-recs-section').style.display = 'none';
+                document.getElementById('ml-health-badge').innerHTML = '';
+                if (btn) { btn.disabled = false; btn.innerHTML = '✨ AI Summarize'; }
+            }
         }
 
 
