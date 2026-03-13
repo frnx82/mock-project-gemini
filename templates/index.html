@@ -5509,22 +5509,46 @@
             }
         });
 
-        // 2. Auth-aware heartbeat: check CIDP session every 4 minutes
-        //    (well within typical 15-min CIDP cookie timeout)
+        // 2. Idle-aware CIDP keepalive
+        //    CIDP expires after ~15 min of no HTTP activity.
+        //    We ping /api/ping every 3 minutes ONLY when the user is active.
+        //    If idle for 15+ min, we stop pinging and let CIDP expire,
+        //    then show a re-authenticate banner when they return.
+        let _lastUserActivity = Date.now();
+        const _IDLE_TIMEOUT = 15 * 60 * 1000;   // 15 minutes
+        const _PING_INTERVAL = 3 * 60 * 1000;   // 3 minutes
+
+        // Track any user interaction as "activity"
+        ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+            document.addEventListener(evt, () => { _lastUserActivity = Date.now(); }, { passive: true });
+        });
+
         setInterval(async () => {
-            const ok = await _checkAuth();
-            if (!ok) {
-                console.warn('[auth] Heartbeat detected expired session');
-                _showAuthBanner();
-            } else if (_authFailed) {
-                // Session recovered (user re-authenticated in another tab)
-                _authFailed = false;
-                const banner = document.getElementById('auth-expiry-banner');
-                if (banner) banner.remove();
-                console.log('[auth] Session recovered — resuming data refresh');
-                fetchData();
+            const idleMs = Date.now() - _lastUserActivity;
+
+            if (idleMs < _IDLE_TIMEOUT) {
+                // User is ACTIVE — ping to keep CIDP session alive
+                try {
+                    await _origFetch('/api/ping');
+                } catch (e) {
+                    // Network error — ignore, will be caught by auth check
+                }
+                // Also verify auth is still valid
+                const ok = await _checkAuth();
+                if (!ok) {
+                    _showAuthBanner();
+                } else if (_authFailed) {
+                    _authFailed = false;
+                    const banner = document.getElementById('auth-expiry-banner');
+                    if (banner) banner.remove();
+                    fetchData();
+                }
+            } else {
+                // User is IDLE (15+ min) — don't ping, let CIDP expire.
+                // When they return, the visibility change handler will detect and prompt.
+                console.log('[auth] User idle for ' + Math.round(idleMs/60000) + 'min — not pinging');
             }
-        }, 4 * 60 * 1000);  // 4 minutes
+        }, _PING_INTERVAL);
 
         // 3. Fetch retry wrapper: handles 5xx retries + CIDP auth detection
         const _origFetch = window.fetch;
