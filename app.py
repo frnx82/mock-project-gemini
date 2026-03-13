@@ -4817,7 +4817,17 @@ def network_health():
             '{"severity":"<critical|warning|info>","resource":"<name>","kind":"<Service|VS>","issue":"<text>","action":"<kubectl cmd>"}]}'
         )
         resp = gemini_generate_with_retry(prompt)
-        d = parse_gemini_json(resp.text)
+        raw = resp.text if resp else ''
+        if not raw or not raw.strip():
+            # Gemini returned empty — fall back to deterministic result
+            return jsonify({'score': score,
+                            'grade': 'A' if score >= 90 else ('B' if score >= 75 else 'C'),
+                            'namespace': namespace, 'service_count': svc_count,
+                            'vs_count': vs_count, 'lb_count': lb_count,
+                            'issues': fallback_issues,
+                            'summary': f'Namespace {namespace}: {svc_count} services, {vs_count} VirtualServices. (AI temporarily unavailable)',
+                            'gemini_powered': False})
+        d = parse_gemini_json(raw)
         d.update({'namespace': namespace, 'service_count': svc_count,
                   'vs_count': vs_count, 'lb_count': lb_count, 'gemini_powered': True})
         return jsonify(d)
