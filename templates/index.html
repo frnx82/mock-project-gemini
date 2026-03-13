@@ -3490,9 +3490,17 @@
                     else showToast(`Could not find resource "${data.target}"`, false);
 
                 } else if (data.action === 'yaml') {
-                    const resource = await findResourceByName(data.target, []);
-                    if (resource) openYamlModal(resource.name, resource.type);
-                    else showToast(`Could not find resource "${data.target}"`, false);
+                    const rType = data.resource_type || '';
+                    // If Gemini gave us both target and resource_type, open YAML directly
+                    if (data.target && rType) {
+                        openYamlModal(data.target, rType);
+                    } else {
+                        // Fallback: search across all resources
+                        const typeFilter = rType ? [rType] : [];
+                        const resource = await findResourceByName(data.target, typeFilter);
+                        if (resource) openYamlModal(resource.name, resource.type);
+                        else showToast(`Could not find resource "${data.target}"`, false);
+                    }
 
                 } else if (data.action === 'image') {
                     // Show image/version/helm info as an AI reply card
@@ -4264,8 +4272,32 @@
             const ns = document.getElementById('namespace-select').value;
             fetch(`/api/pods/${podName}/logs?namespace=${ns}`)
                 .then(r => r.json())
-                .then(d => document.getElementById('log-content').innerText = d.logs || d.error)
-                .catch(e => document.getElementById('log-content').innerText = e);
+                .then(d => {
+                    const logEl = document.getElementById('log-content');
+                    if (d.status === 'initializing') {
+                        logEl.innerHTML = `<div style="text-align:center;padding:40px 20px;">
+                            <div style="font-size:48px;margin-bottom:16px;">⏳</div>
+                            <div style="font-size:16px;font-weight:600;color:#e67e22;margin-bottom:12px;">Pod is Initializing</div>
+                            <div style="font-size:13px;color:#666;max-width:500px;margin:0 auto;line-height:1.6;">${(d.logs || '').replace(/\n/g, '<br>')}</div>
+                            <button onclick="openLogsModal('${podName.replace(/'/g, "\\'")}')" style="margin-top:20px;padding:8px 20px;background:#4a00e0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🔄 Retry</button>
+                        </div>`;
+                    } else if (d.error) {
+                        logEl.innerHTML = `<div style="text-align:center;padding:40px 20px;">
+                            <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+                            <div style="font-size:14px;color:#dc3545;max-width:500px;margin:0 auto;line-height:1.6;">${d.error}</div>
+                            <button onclick="openLogsModal('${podName.replace(/'/g, "\\'")}')" style="margin-top:20px;padding:8px 20px;background:#4a00e0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🔄 Retry</button>
+                        </div>`;
+                    } else {
+                        logEl.innerText = d.logs || '(no logs available)';
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('log-content').innerHTML = `<div style="text-align:center;padding:40px 20px;">
+                        <div style="font-size:48px;margin-bottom:16px;">❌</div>
+                        <div style="font-size:14px;color:#dc3545;">Failed to fetch logs: ${e.message || e}</div>
+                        <button onclick="openLogsModal('${podName.replace(/'/g, "\\'")}')" style="margin-top:20px;padding:8px 20px;background:#4a00e0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🔄 Retry</button>
+                    </div>`;
+                });
         }
 
         async function summarizeLogs() {

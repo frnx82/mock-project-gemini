@@ -4,6 +4,7 @@ monkey.patch_all()
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit, disconnect
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 from kubernetes.stream import stream
 import os
 import threading
@@ -92,6 +93,118 @@ def _prewarm_model():
     except Exception:
         pass
 threading.Thread(target=_prewarm_model, daemon=True).start()
+
+import re, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# ── In-memory TTL cache for expensive AI endpoints ───────────────────────────
+# Caches Gemini responses for 5 minutes to avoid re-querying on repeated clicks.
+# Key: (endpoint_name, namespace), Value: (timestamp, response_data)
+_ai_response_cache = {}
+_AI_CACHE_TTL = 300  # 5 minutes
+
+def _cache_get(key):
+    """Return cached data if fresh, else None."""
+    entry = _ai_response_cache.get(key)
+    if entry and (time.time() - entry[0]) < _AI_CACHE_TTL:
+        return entry[1]
+    return None
+
+def _cache_set(key, data):
+    """Store data in cache with current timestamp."""
+    _ai_response_cache[key] = (time.time(), data)
+
+def parse_gemini_json(raw_text):
+    """Robustly parse JSON from Gemini output, handling common malformations.
+
+    Gemini sometimes returns:
+    - Markdown fences (```json ... ```)
+    - Trailing commas  ({..., })
+    - Invalid backslash escapes (\\n inside strings that should be \\\\n)
+    - Single-quoted strings instead of double-quoted
+    - Extra text before/after the JSON block
+
+    This function applies progressive repairs before giving up.
+    """
+    text = raw_text.strip()
+
+    # 1. Strip markdown code fences
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    text = text.strip()
+
+    # 2. Extract JSON block if embedded in extra text — find first { to last }
+    brace_start = text.find('{')
+    brace_end = text.rfind('}')
+    if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
+        text = text[brace_start:brace_end + 1]
+
+    # 3. Try parsing as-is first (fast path)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. Fix trailing commas before } or ]
+    cleaned = re.sub(r',\s*([}\]])', r'\1', text)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 5. Fix invalid backslash escapes (e.g. \n inside a string that isn't \\n)
+    #    Replace \ followed by a char that isn't a valid JSON escape
+    cleaned2 = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', cleaned)
+    try:
+        return json.loads(cleaned2)
+    except json.JSONDecodeError:
+        pass
+
+    # 6. Last resort: try replacing single quotes with double quotes
+    cleaned3 = cleaned2.replace("'", '"')
+    try:
+        return json.loads(cleaned3)
+    except json.JSONDecodeError:
+        pass
+
+    # All repairs failed — raise with the original error for logging
+    raise json.JSONDecodeError(
+        f"Could not parse Gemini response after cleanup attempts",
+        text[:200], 0
+    )
+
+
+def gemini_generate_with_retry(prompt, max_retries=2):
+    """Call Gemini with retry on transient SSL/connection errors.
+
+    GDC network environments often experience intermittent SSL EOF errors.
+    This wrapper retries on connection-level failures without retrying on
+    content/quota errors.
+    """
+    model = get_model()
+    if not model:
+        return None
+
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = model.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+            return resp
+        except Exception as e:
+            err_str = str(e).lower()
+            # Retry on transient network/SSL errors
+            is_transient = any(kw in err_str for kw in [
+                'eof occurred', 'ssl', 'connection reset',
+                'server disconnected', 'broken pipe',
+                'connection refused', 'timed out', 'timeout'
+            ])
+            if is_transient and attempt < max_retries:
+                time.sleep(1.5 * (attempt + 1))  # Back-off: 1.5s, 3s
+                last_error = e
+                continue
+            raise  # Non-transient or final attempt — re-raise
+    raise last_error
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'gdc-dashboard-default-secret-key-change-me')
@@ -460,6 +573,19 @@ def get_pod_logs(name):
     try:
         logs = v1.read_namespaced_pod_log(name, namespace)
         return jsonify({'logs': logs})
+    except ApiException as e:
+        # K8s returns 400 when pod is initializing / container not ready
+        if e.status == 400:
+            # Extract the human-readable message from the K8s response
+            import json as _json
+            try:
+                body = _json.loads(e.body)
+                reason = body.get('message', str(e))
+            except Exception:
+                reason = e.reason or str(e)
+            friendly = f"⏳ Pod '{name}' is not ready yet.\n\nKubernetes says: {reason}\n\nThis usually means init containers are still running. Please wait a moment and try again."
+            return jsonify({'logs': friendly, 'status': 'initializing'})
+        return jsonify({'error': str(e)}), e.status or 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -849,6 +975,13 @@ def ai_optimize():
     }
     """
     namespace = request.args.get('namespace', os.getenv('POD_NAMESPACE', 'default'))
+
+    # ── Cache check — return instantly if fresh ──
+    cache_key = ('optimizer', namespace)
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify(cached)
+
     cost_per_core = 60.0  # EUR per core per month (org-specific)
 
     # ── Utility: CPU / Memory parsers ────────────────────────────────────────
@@ -1246,13 +1379,14 @@ Rules:
 - monthly_saving POSITIVE = saving (reducing over-provisioned). NEGATIVE = cost increase (raising under-provisioned).
 - Return ONLY JSON. No markdown. No explanation.
 """
-        response = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        result   = _extract_json(response.text)
+        response = gemini_generate_with_retry(prompt)
+        result   = parse_gemini_json(response.text)
         result.setdefault("cost_rate_per_core", cost_per_core)
         result.setdefault("currency", "EUR")
         result.setdefault("metrics_source", metrics_source)
         result.setdefault("recommendations", [])
         result.setdefault("summary", "Analysis complete.")
+        _cache_set(cache_key, result)
         return jsonify(result)
 
     except json.JSONDecodeError as e:
@@ -1279,6 +1413,11 @@ def fetch_pod_logs_aggregated(name, namespace):
                 try:
                     log = v1.read_namespaced_pod_log(name, namespace, container=c.name, tail_lines=50)
                     logs.append(f"--- Init Container: {c.name} ---\n{log}")
+                except ApiException as e:
+                    if e.status == 400:
+                        logs.append(f"--- Init Container: {c.name} ---\n⏳ Container is initializing, logs not available yet.")
+                    else:
+                        logs.append(f"--- Init Container: {c.name} ---\n(Error: {e.reason})")
                 except: pass
                 
         # 2. App Containers
@@ -1286,12 +1425,17 @@ def fetch_pod_logs_aggregated(name, namespace):
             try:
                 log = v1.read_namespaced_pod_log(name, namespace, container=c.name, tail_lines=100)
                 logs.append(f"--- Container: {c.name} ---\n{log}")
+            except ApiException as e:
+                if e.status == 400:
+                    logs.append(f"--- Container: {c.name} ---\n⏳ Container is waiting to start (PodInitializing). Logs will be available once the container is running.")
+                else:
+                    logs.append(f"--- Container: {c.name} ---\n(Error: {e.reason})")
             except: pass
             
     except Exception as e:
         return f"Error fetching logs: {str(e)}"
         
-    return "\n\n".join(logs)
+    return "\n\n".join(logs) if logs else f"⏳ Pod '{name}' has no available logs yet. It may still be initializing."
 
 @app.route('/api/ai/analyze_logs', methods=['POST'])
 def analyze_logs_gemini():
@@ -1355,6 +1499,12 @@ def security_scan():
     """
     namespace = request.args.get('namespace', os.getenv('POD_NAMESPACE', 'default'))
 
+    # ── Cache check — return instantly if fresh ──
+    cache_key = ('security_scan', namespace)
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify(cached)
+
     try:
         core_v1  = client.CoreV1Api()
         apps_v1  = client.AppsV1Api()
@@ -1362,19 +1512,38 @@ def security_scan():
         rbac_v1  = client.RbacAuthorizationV1Api()
         net_v1   = client.NetworkingV1Api()
 
-        # ── 1. Collect raw specs from ALL resource kinds ─────────────────────
+        # ── 1. Collect raw specs — PARALLEL to speed up GDC network ──────────
         inventory_sections = []
+        k8s_results = {}
 
-        def _collect(label, items, to_dict_fn):
-            if not items:
-                return
-            lines = [f"\n=== {label} ==="]
-            for item in items:
-                try:
-                    lines.append(to_dict_fn(item))
-                except Exception:
-                    pass
-            inventory_sections.append("\n".join(lines))
+        def _fetch(label, fn):
+            try:
+                return (label, fn())
+            except Exception:
+                return (label, [])
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = [
+                pool.submit(_fetch, 'deploys', lambda: apps_v1.list_namespaced_deployment(namespace).items),
+                pool.submit(_fetch, 'stateful', lambda: apps_v1.list_namespaced_stateful_set(namespace).items),
+                pool.submit(_fetch, 'daemons', lambda: apps_v1.list_namespaced_daemon_set(namespace).items),
+                pool.submit(_fetch, 'pods', lambda: core_v1.list_namespaced_pod(namespace).items),
+                pool.submit(_fetch, 'jobs', lambda: batch_v1.list_namespaced_job(namespace).items),
+                pool.submit(_fetch, 'sas', lambda: core_v1.list_namespaced_service_account(namespace).items),
+                pool.submit(_fetch, 'netpols', lambda: net_v1.list_namespaced_network_policy(namespace).items),
+                pool.submit(_fetch, 'rbs', lambda: rbac_v1.list_namespaced_role_binding(namespace).items),
+                pool.submit(_fetch, 'cms', lambda: core_v1.list_namespaced_config_map(namespace).items),
+                pool.submit(_fetch, 'secrets', lambda: core_v1.list_namespaced_secret(namespace).items),
+            ]
+            for f in as_completed(futures):
+                label, items = f.result()
+                k8s_results[label] = items
+
+        deploys  = k8s_results.get('deploys', [])
+        stateful = k8s_results.get('stateful', [])
+        daemons  = k8s_results.get('daemons', [])
+        pods     = k8s_results.get('pods', [])
+        jobs     = k8s_results.get('jobs', [])
 
         def _workload_summary(w):
             """Summarise a workload object as compact YAML-like text."""
@@ -1423,11 +1592,17 @@ def security_scan():
                     lines.append(f"    WARN_plaintext_secrets_in_env: {secret_envs}")
             return "\n".join(lines)
 
-        deploys  = apps_v1.list_namespaced_deployment(namespace).items
-        stateful = apps_v1.list_namespaced_stateful_set(namespace).items
-        daemons  = apps_v1.list_namespaced_daemon_set(namespace).items
-        pods     = core_v1.list_namespaced_pod(namespace).items
-        jobs     = batch_v1.list_namespaced_job(namespace).items
+
+        def _collect(label, items, to_dict_fn):
+            if not items:
+                return
+            lines = [f"\n=== {label} ==="]
+            for item in items:
+                try:
+                    lines.append(to_dict_fn(item))
+                except Exception:
+                    pass
+            inventory_sections.append("\n".join(lines))
 
         _collect("Deployments",  deploys,  _workload_summary)
         _collect("StatefulSets", stateful, _workload_summary)
@@ -1449,43 +1624,36 @@ def security_scan():
             inventory_sections.append("\n".join(j_lines))
 
         # ServiceAccounts
-        try:
-            sas = core_v1.list_namespaced_service_account(namespace).items
+        sas = k8s_results.get('sas', [])
+        if sas:
             sa_lines = ["=== ServiceAccounts ==="]
             for sa in sas:
                 auto_mount = getattr(sa, 'automount_service_account_token', True)
                 sa_lines.append(f"  sa: {sa.metadata.name}  automountToken: {auto_mount}")
             inventory_sections.append("\n".join(sa_lines))
-        except Exception:
-            pass
 
         # NetworkPolicies
-        try:
-            netpols = net_v1.list_namespaced_network_policy(namespace).items
-            if netpols:
-                np_lines = ["=== NetworkPolicies ==="]
-                for np in netpols:
-                    np_lines.append(f"  policy: {np.metadata.name}  podSelector: {np.spec.pod_selector}")
-                inventory_sections.append("\n".join(np_lines))
-            else:
-                inventory_sections.append("=== NetworkPolicies ===\n  NONE — all pod-to-pod traffic is unrestricted")
-        except Exception:
-            pass
+        netpols = k8s_results.get('netpols', [])
+        if netpols:
+            np_lines = ["=== NetworkPolicies ==="]
+            for np in netpols:
+                np_lines.append(f"  policy: {np.metadata.name}  podSelector: {np.spec.pod_selector}")
+            inventory_sections.append("\n".join(np_lines))
+        else:
+            inventory_sections.append("=== NetworkPolicies ===\n  NONE — all pod-to-pod traffic is unrestricted")
 
         # RBAC — RoleBindings
-        try:
-            rbs = rbac_v1.list_namespaced_role_binding(namespace).items
+        rbs = k8s_results.get('rbs', [])
+        if rbs:
             rb_lines = ["=== RoleBindings (namespace-scoped) ==="]
             for rb in rbs:
                 subjects = [(s.kind, s.name) for s in (rb.subjects or [])]
                 rb_lines.append(f"  rb: {rb.metadata.name}  role: {rb.role_ref.name}  subjects: {subjects}")
             inventory_sections.append("\n".join(rb_lines))
-        except Exception:
-            pass
 
         # ConfigMaps — check for embedded credentials, certs, risky keys
-        try:
-            cms = core_v1.list_namespaced_config_map(namespace).items
+        cms = k8s_results.get('cms', [])
+        if cms:
             cm_lines = ["=== ConfigMaps ==="]
             for cm in cms:
                 if cm.metadata.name in ('kube-root-ca.crt',):
@@ -1501,12 +1669,10 @@ def security_scan():
                 if binary_keys:
                     cm_lines.append(f"    binary_keys: {binary_keys[:5]}")
             inventory_sections.append("\n".join(cm_lines))
-        except Exception:
-            pass
 
         # Secrets — metadata only (never log values); check types and naming
-        try:
-            secrets = core_v1.list_namespaced_secret(namespace).items
+        secrets = k8s_results.get('secrets', [])
+        if secrets:
             sec_lines = ["=== Secrets ==="]
             for s in secrets:
                 if s.metadata.name.startswith('sh.helm') or s.metadata.name.startswith('default-token'):
@@ -1521,8 +1687,6 @@ def security_scan():
                 if env_like:
                     sec_lines.append(f"    INFO_env_style_keys: {env_like[:5]}")
             inventory_sections.append("\n".join(sec_lines))
-        except Exception:
-            pass
 
         full_inventory = "\n\n".join(inventory_sections)
 
@@ -1631,18 +1795,12 @@ Return ONLY the JSON. No markdown fences. No prose.
 === CLUSTER INVENTORY ===
 {full_inventory[:22000]}
 """
-        response = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        raw = response.text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        result = json.loads(raw)
+        response = gemini_generate_with_retry(prompt)
+        result = parse_gemini_json(response.text)
         result.setdefault("executive_summary", "Audit complete.")
         result.setdefault("severity_counts", {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0})
         result.setdefault("risks", [])
+        _cache_set(cache_key, result)
         return jsonify(result)
 
     except json.JSONDecodeError as e:
@@ -2040,6 +2198,53 @@ def ai_query():
                 ports = ",".join(f"{p.port}" for p in (s.spec.ports or []))
                 resource_lines.append(f"Service:{s.metadata.name} type={s.spec.type} ports={ports}")
 
+            # Jobs
+            try:
+                batch_v1 = client.BatchV1Api()
+                jobs = batch_v1.list_namespaced_job(namespace).items
+                for j in jobs:
+                    status = 'Succeeded' if (j.status.succeeded or 0) > 0 else ('Failed' if (j.status.failed or 0) > 0 else 'Running')
+                    resource_lines.append(f"Job:{j.metadata.name} status={status}")
+            except Exception:
+                pass
+
+            # Ingresses
+            try:
+                net_v1 = client.NetworkingV1Api()
+                ingresses = net_v1.list_namespaced_ingress(namespace).items
+                for ing in ingresses:
+                    hosts = ','.join(r.host or '*' for r in (ing.spec.rules or []))
+                    resource_lines.append(f"Ingress:{ing.metadata.name} hosts={hosts}")
+            except Exception:
+                pass
+
+            # VirtualServices (Istio)
+            try:
+                co_api = client.CustomObjectsApi()
+                vs_list = co_api.list_namespaced_custom_object(
+                    'networking.istio.io', 'v1beta1', namespace, 'virtualservices')
+                for vs in vs_list.get('items', []):
+                    hosts = ','.join(vs.get('spec', {}).get('hosts', []))
+                    resource_lines.append(f"VirtualService:{vs['metadata']['name']} hosts={hosts}")
+            except Exception:
+                pass
+
+            # ConfigMaps
+            try:
+                cms = v1.list_namespaced_config_map(namespace).items
+                for cm in cms[:20]:  # Limit to avoid noise
+                    resource_lines.append(f"ConfigMap:{cm.metadata.name}")
+            except Exception:
+                pass
+
+            # Secrets
+            try:
+                secrets = v1.list_namespaced_secret(namespace).items
+                for sec in secrets[:20]:
+                    resource_lines.append(f"Secret:{sec.metadata.name} type={sec.type}")
+            except Exception:
+                pass
+
         except Exception as ctx_err:
             resource_lines.append(f"(Could not fetch cluster data: {ctx_err})")
 
@@ -2073,6 +2278,7 @@ Return ONLY a valid JSON object (no markdown, no explanation):
 {{
   "action": one of: "filter" | "scale" | "logs" | "delete" | "describe" | "analyze" | "restart" | "events" | "reset" | "navigate" | "optimize" | "security" | "explain" | "yaml" | "image" | "chat",
   "target": the exact resource name from the cluster context above (fuzzy-match if needed),
+  "resource_type": the K8s kind of the target resource - one of: "Deployment" | "Service" | "Pod" | "StatefulSet" | "DaemonSet" | "ConfigMap" | "Secret" | "Job" | "CronJob" | "Ingress" | "NetworkPolicy" | "HPA" | "VirtualService" | "DestinationRule" | "Gateway" | "Namespace" | null,
   "criteria": {{}} or filter object e.g. {{"status": "Failed"}},
   "count": null or integer (scale action only),
   "message": short 1-sentence friendly confirmation,
@@ -2091,7 +2297,7 @@ KUBERNETES OPERATIONS — use exact resource names from the cluster context abov
 - "restart": Rolling restart a Deployment/StatefulSet. target=name from context.
 - "events": Show K8s events. target=resource name or empty for namespace.
 - "reset": Clear all filters, no target.
-- "yaml": Show YAML manifest. target=resource name from context. Use for: "show yaml", "get manifest", "yaml definition", "show config file".
+- "yaml": Show YAML manifest. target=resource name from context. resource_type=exact kind (Deployment/Service/Pod/StatefulSet etc.) from context. CRITICAL: if the user says "service yaml" or "show service", resource_type MUST be "Service". If they say "deployment yaml", resource_type MUST be "Deployment". Always match the user-specified resource kind. Use for: "show yaml", "get manifest", "yaml definition", "show config file".
 - "image": Answer what image/version/tag/helm chart a resource uses. Set reply to the exact image string and helm_chart from the cluster context. Use for: "what image", "which version", "image tag", "helm chart version", "what helm chart".
 
 NAVIGATION: "navigate" — target = "workloads"|"networking"|"optimizer"|"security"|"yaml-gen"
@@ -2104,7 +2310,8 @@ EXPLAIN & CHAT:
 IMPORTANT RULES:
 - ALWAYS use exact resource names from the cluster context. Never make up names.
 - For "image": set reply = "image=<exact_image> helm_chart=<helm_chart> helm_release=<helm_release>" from the context.
-- For "yaml", "logs", "events", "describe", "analyze", "restart": match the resource name from context using fuzzy matching if the user used a partial name.
+- For "yaml", "logs", "events", "describe", "analyze", "restart": match the resource name from context using fuzzy matching if the user used a partial name. Always set resource_type to the correct kind.
+- For "yaml": ALWAYS set resource_type. If the user mentions "service" → resource_type="Service". If "deployment" → resource_type="Deployment". If ambiguous, infer from context.
 - For "explain" and "chat" and "image": always populate "reply" with the actual answer. Never leave it null.
 - Prefer specific actions over "chat".
 
@@ -2112,17 +2319,8 @@ Return ONLY the JSON object. No markdown. No code fences. No explanation.
 """
 
 
-        response = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        raw = response.text.strip()
-
-        # Strip markdown fences if Gemini wrapped the JSON
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        parsed = json.loads(raw)
+        response = gemini_generate_with_retry(prompt)
+        parsed = parse_gemini_json(response.text)
 
         # Ensure required fields exist
         parsed.setdefault('action', 'chat')
@@ -2295,6 +2493,8 @@ def get_resource_yaml(name):
         apps_v1 = client.AppsV1Api()
         
         resource = None
+
+        # ── Core & Apps API resources ──
         if kind == 'Pod':
             resource = v1.read_namespaced_pod(name, namespace, _preload_content=False)
         elif kind == 'Deployment':
@@ -2306,9 +2506,57 @@ def get_resource_yaml(name):
         elif kind == 'DaemonSet':
             resource = apps_v1.read_namespaced_daemon_set(name, namespace, _preload_content=False)
         elif kind == 'ConfigMap':
-             resource = v1.read_namespaced_config_map(name, namespace, _preload_content=False)
+            resource = v1.read_namespaced_config_map(name, namespace, _preload_content=False)
         elif kind == 'Secret':
-             resource = v1.read_namespaced_secret(name, namespace, _preload_content=False)
+            resource = v1.read_namespaced_secret(name, namespace, _preload_content=False)
+
+        # ── Batch API (Jobs / CronJobs) ──
+        elif kind == 'Job':
+            batch_v1 = client.BatchV1Api()
+            resource = batch_v1.read_namespaced_job(name, namespace, _preload_content=False)
+        elif kind == 'CronJob':
+            batch_v1 = client.BatchV1Api()
+            resource = batch_v1.read_namespaced_cron_job(name, namespace, _preload_content=False)
+
+        # ── Networking API (Ingress, NetworkPolicy) ──
+        elif kind == 'Ingress':
+            net_v1 = client.NetworkingV1Api()
+            resource = net_v1.read_namespaced_ingress(name, namespace, _preload_content=False)
+        elif kind == 'NetworkPolicy':
+            net_v1 = client.NetworkingV1Api()
+            resource = net_v1.read_namespaced_network_policy(name, namespace, _preload_content=False)
+
+        # ── Autoscaling (HPA) ──
+        elif kind in ('HPA', 'HorizontalPodAutoscaler'):
+            auto_v1 = client.AutoscalingV1Api()
+            resource = auto_v1.read_namespaced_horizontal_pod_autoscaler(name, namespace, _preload_content=False)
+
+        # ── Istio CRDs (VirtualService, DestinationRule, Gateway) ──
+        elif kind == 'VirtualService':
+            co_api = client.CustomObjectsApi()
+            data = co_api.get_namespaced_custom_object(
+                'networking.istio.io', 'v1beta1', namespace, 'virtualservices', name)
+            if 'metadata' in data and 'managedFields' in data['metadata']:
+                del data['metadata']['managedFields']
+            return jsonify({'yaml': data})
+        elif kind == 'DestinationRule':
+            co_api = client.CustomObjectsApi()
+            data = co_api.get_namespaced_custom_object(
+                'networking.istio.io', 'v1beta1', namespace, 'destinationrules', name)
+            if 'metadata' in data and 'managedFields' in data['metadata']:
+                del data['metadata']['managedFields']
+            return jsonify({'yaml': data})
+        elif kind == 'Gateway':
+            co_api = client.CustomObjectsApi()
+            data = co_api.get_namespaced_custom_object(
+                'networking.istio.io', 'v1beta1', namespace, 'gateways', name)
+            if 'metadata' in data and 'managedFields' in data['metadata']:
+                del data['metadata']['managedFields']
+            return jsonify({'yaml': data})
+
+        # ── Namespace (cluster-scoped) ──
+        elif kind == 'Namespace':
+            resource = v1.read_namespace(name, _preload_content=False)
 
         if resource:
              # Use json.load because _preload_content=False returns a HTTPResponse object
@@ -2321,8 +2569,13 @@ def get_resource_yaml(name):
                  
              return jsonify({'yaml': data})
         else:
-             return jsonify({'error': 'Resource not found or type unsupported'}), 404
+             return jsonify({'error': f'Resource type "{kind}" is not supported. Supported types: Pod, Deployment, Service, StatefulSet, DaemonSet, ConfigMap, Secret, Job, CronJob, Ingress, NetworkPolicy, HPA, VirtualService, DestinationRule, Gateway, Namespace.'}), 404
 
+    except ApiException as e:
+        if e.status == 404:
+            return jsonify({'error': f'{kind} "{name}" not found in namespace "{namespace}".'}), 404
+        print(f"Error fetching YAML: {e}")
+        return jsonify({'error': str(e)}), e.status or 500
     except Exception as e:
         print(f"Error fetching YAML: {e}")
         return jsonify({'error': str(e)}), 500
@@ -4035,9 +4288,8 @@ def health_pulse():
             '  ]\n'
             '}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['namespace'] = namespace
         d['total_resources'] = total
         d['failing_count'] = len(failing)
@@ -4130,9 +4382,8 @@ def health_check():
             '  "kubectl_hints": ["<cmd1>", "<cmd2>", "<cmd3>"]\n'
             '}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['gemini_powered'] = True
         return jsonify(d)
 
@@ -4214,9 +4465,8 @@ def daemonset_insight():
             '  "kubectl_hints": ["<cmd1>", "<cmd2>", "<cmd3>"]\n'
             '}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['coverage_percent'] = pct
         d['gemini_powered'] = True
         return jsonify(d)
@@ -4303,9 +4553,8 @@ def pod_triage():
             '  "kubectl_hints": ["<cmd1>", "<cmd2>", "<cmd3>"]\n'
             '}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['pod'] = name
         d['affected_siblings'] = []
         d['gemini_powered'] = True
@@ -4397,9 +4646,8 @@ def configmap_impact():
             '  "kubectl_hints": ["<cmd1>", "<cmd2>", "<cmd3>"]\n'
             '}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['configmap'] = name
         d['consumers'] = consumers
         d['gemini_powered'] = True
@@ -4513,9 +4761,8 @@ def secret_audit():
             '  "kubectl_hints": ["<cmd1>", "<cmd2>", "<cmd3>"]\n'
             '}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['secret'] = name
         d['age_days'] = age_days
         d['rotation_overdue'] = overdue
@@ -4584,9 +4831,8 @@ def network_health():
             '{"score":<int>,"grade":"<A|B|C|D>","summary":"<1 sentence>","issues":['
             '{"severity":"<critical|warning|info>","resource":"<name>","kind":"<Service|VS>","issue":"<text>","action":"<kubectl cmd>"}]}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d.update({'namespace': namespace, 'service_count': svc_count,
                   'vs_count': vs_count, 'lb_count': lb_count, 'gemini_powered': True})
         return jsonify(d)
@@ -4650,9 +4896,8 @@ def service_analyze():
             '"selector_advice":"<label selector advice>","health_check":"<readiness/health advice>",'
             '"kubectl_hints":["<cmd1>","<cmd2>","<cmd3>"]}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['service'] = name
         d['gemini_powered'] = True
         return jsonify(d)
@@ -4712,9 +4957,8 @@ def service_dependency():
             '{"summary":"<1 sentence>","blast_radius":"<impact if service removed>",'
             '"kubectl_hints":["<cmd1>","<cmd2>","<cmd3>"]}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d.update({'service': name, 'consumers': consumers, 'virtual_services': [], 'ingresses': [], 'gemini_powered': True})
         return jsonify(d)
     except Exception as e:
@@ -4767,9 +5011,8 @@ def service_risk():
             '"risks":[{"severity":"<high|medium|low>","issue":"<description>","fix":"<remediation>"}],'
             '"kubectl_hints":["<cmd1>","<cmd2>","<cmd3>"]}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['service'] = name
         d['gemini_powered'] = True
         return jsonify(d)
@@ -4824,9 +5067,8 @@ def vs_route_analysis():
             '"issues":[{"severity":"<warning|info>","issue":"<text>","fix":"<cmd>"}],'
             '"kubectl_hints":["<cmd1>","<cmd2>","<cmd3>"]}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['virtual_service'] = name
         d['gemini_powered'] = True
         return jsonify(d)
@@ -4890,9 +5132,8 @@ def vs_traffic_policy():
             '"traffic_risks":[{"risk":"<description>","severity":"<high|medium|low>","fix":"<cmd>"}],'
             '"kubectl_hints":["<cmd1>","<cmd2>","<cmd3>","<cmd4>"]}'
         )
-        resp = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        text = resp.text.strip().lstrip('```json').lstrip('```').rstrip('```').strip()
-        d = json.loads(text)
+        resp = gemini_generate_with_retry(prompt)
+        d = parse_gemini_json(resp.text)
         d['virtual_service'] = name
         d['gemini_powered'] = True
         return jsonify(d)
