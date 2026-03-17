@@ -5699,9 +5699,12 @@
             const ns = document.getElementById('namespace-select')?.value || '';
 
             try {
-                const res = await fetch('/api/ai/chat', {
+                const res = await fetch('/api/ai/converse', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Id': _chatSessionId
+                    },
                     body: JSON.stringify({
                         message: text,
                         session_id: _chatSessionId,
@@ -5729,6 +5732,13 @@
 
         // ── Reset session ─────────────────────────────────────────────────
         function resetChatSession() {
+            // Clear server-side conversation history
+            if (_chatSessionId) {
+                fetch('/api/ai/converse/reset', {
+                    method: 'POST',
+                    headers: { 'X-Session-Id': _chatSessionId }
+                }).catch(() => {});
+            }
             _chatSessionId = null;
             const msgs = document.getElementById('chat-messages');
             if (msgs) {
