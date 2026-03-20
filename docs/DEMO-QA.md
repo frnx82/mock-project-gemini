@@ -84,7 +84,112 @@ This is documented in Google's Vertex AI data governance page.
 
 ---
 
-### Q7: "What if Gemini gives wrong advice?"
+### Q7: "Are you training or building any AI/ML models?"
+
+**A:** **No. We are not training, fine-tuning, or building any AI models.** We are purely **consumers** of an existing model via API.
+
+Think of it like using Google Maps — you don't build the navigation algorithm, you just call the API and get directions. That's exactly what we do with Gemini:
+
+1. **We collect** Kubernetes data (logs, events, specs) — this is standard K8s API calls
+2. **We write a prompt** — a structured question like "analyze this deployment's health"
+3. **We call the Gemini API** — send the prompt, get a response
+4. **We display the result** — render the AI's analysis in the dashboard
+
+**There is zero ML infrastructure in this project:**
+- ❌ No model training
+- ❌ No fine-tuning
+- ❌ No custom datasets
+- ❌ No GPUs
+- ❌ No TensorFlow, PyTorch, or any ML framework
+- ❌ No training pipelines
+
+**What we do have is prompt engineering** — carefully designing the prompts so Gemini returns structured, accurate, and actionable responses. This is software engineering, not ML engineering. The `google-genai` Python SDK is just an HTTP client wrapper that calls the Vertex AI REST API.
+
+---
+
+### Q8: "How exactly does the K8s data collection and Gemini API call work?"
+
+**A:** Let's walk through a concrete example — what happens when you click **"Diagnose"** on `billing-service`:
+
+**Step 1 — Collect K8s data (standard Kubernetes API calls):**
+
+The backend uses the official Python Kubernetes SDK to make the same API calls that `kubectl` makes:
+
+```python
+# These are normal K8s API calls — no AI involved yet
+deployment = apps_v1.read_namespaced_deployment("billing-service", namespace)
+pods = v1.list_namespaced_pod(namespace, label_selector="app=billing-service")
+logs = v1.read_namespaced_pod_log(pod.name, namespace, tail_lines=200)
+events = v1.list_namespaced_event(namespace, field_selector="involvedObject.name=billing-service")
+```
+
+This is equivalent to running:
+```bash
+kubectl describe deployment billing-service
+kubectl get pods -l app=billing-service
+kubectl logs billing-service-abc123 --tail=200
+kubectl get events --field-selector involvedObject.name=billing-service
+```
+
+**Step 2 — Build a text prompt (just a string):**
+
+All the K8s data gets assembled into a single text prompt:
+
+```
+"You are a Kubernetes SRE performing a health check.
+Analyze this deployment and return JSON with health_score, risks, and fixes.
+
+=== DEPLOYMENT SPEC ===
+Name: billing-service, Replicas: 2/3 ready, Image: billing:v2.3.3
+
+=== POD STATUS ===
+billing-service-abc123: Running (restarts: 0)
+billing-service-ghi789: CrashLoopBackOff
+
+=== LOGS (billing-service-ghi789) ===
+ERROR: Connection refused to postgres:5432
+FATAL: Cannot connect to database
+
+=== EVENTS ===
+Warning BackOff: Container restarting (3 times in 5m)"
+```
+
+**Step 3 — Call Gemini API (one HTTPS POST request):**
+
+```python
+response = model.generate_content(prompt)
+```
+
+Under the hood, this is literally **one HTTPS POST** to `https://us-central1-aiplatform.googleapis.com/...` with the prompt text as the body. Same as calling any REST API.
+
+**Step 4 — Gemini processes and responds:**
+
+Gemini reads the K8s data, uses its pre-trained knowledge of Kubernetes error patterns, and returns structured JSON:
+
+```json
+{
+  "health_score": 35,
+  "status": "critical",
+  "risks": [
+    "Pod billing-service-ghi789 in CrashLoopBackOff — cannot connect to PostgreSQL",
+    "12 restarts indicates intermittent database connectivity"
+  ],
+  "kubectl_hints": [
+    "kubectl logs billing-service-ghi789 --previous",
+    "kubectl describe svc postgres"
+  ]
+}
+```
+
+**Important:** Gemini does NOT connect to your cluster. It only analyzes the text data we sent in the prompt. It does not store or remember the data.
+
+**Step 5 — Dashboard renders the JSON** as a nicely formatted card with color-coded health score, risk list, and clickable kubectl commands.
+
+> **Simple analogy:** *"It's like copying your kubectl output into ChatGPT and asking 'what's wrong?' — except we automated the copy-paste, we use a structured prompt for consistent results, and we render the answer in the dashboard."*
+
+---
+
+### Q9: "What if Gemini gives wrong advice?"
 
 **A:** Gemini can hallucinate, but we mitigate this in several ways:
 1. **Real data, not imagination** — we always send actual K8s data (logs, events). Gemini analyzes real facts, not hypothetical scenarios
