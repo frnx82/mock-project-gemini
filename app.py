@@ -34,7 +34,7 @@ def get_model():
                            resp   = client.models.generate_content(model=GEMINI_MODEL, contents=...)
     Thread-safe lazy init via double-checked locking.
     """
-    global _client, _client_ready
+    global _client, _client_ready, _client_error
     if _client_ready:
         return _client
     with _client_lock:
@@ -48,16 +48,48 @@ def get_model():
             project     = os.getenv("GCP_PROJECT_ID", "")
             location    = os.getenv("GCP_REGION", "us-central1")
 
+            print(f"[AI] init: GCP_PROJECT_ID={'set' if project else 'MISSING'}, "
+                  f"GCP_REGION={location}, "
+                  f"GOOGLE_APPLICATION_CREDENTIALS={'set' if sa_key_path else 'MISSING'}")
+
             if not sa_key_path:
                 raise ValueError("GOOGLE_APPLICATION_CREDENTIALS is not set")
             if not project:
                 raise ValueError("GCP_PROJECT_ID is not set")
 
+            # Diagnose SA key file issues (common with K8s secrets)
+            if os.path.exists(sa_key_path):
+                file_size = os.path.getsize(sa_key_path)
+                print(f"[AI] SA key file exists: {sa_key_path} ({file_size} bytes)")
+                if file_size == 0:
+                    raise ValueError(f"SA key file is empty (0 bytes): {sa_key_path}")
+                # Try to parse the JSON before passing to google.oauth2
+                try:
+                    with open(sa_key_path) as f:
+                        sa_data = json.load(f)
+                    sa_email = sa_data.get("client_email", "?")
+                    sa_type = sa_data.get("type", "?")
+                    print(f"[AI] SA key parsed OK: type={sa_type}, email={sa_email}")
+                    if sa_type != "service_account":
+                        raise ValueError(
+                            f"SA key JSON 'type' is '{sa_type}', expected 'service_account'. "
+                            f"File may contain wrong content (e.g. base64-encoded or wrapped)."
+                        )
+                except json.JSONDecodeError as je:
+                    # Read first 100 chars for diagnosis
+                    with open(sa_key_path) as f:
+                        preview = f.read(100)
+                    raise ValueError(
+                        f"SA key file is not valid JSON: {je}. "
+                        f"First 100 chars: {repr(preview)}"
+                    )
+            else:
+                raise ValueError(f"SA key file not found at path: {sa_key_path}")
+
             creds = service_account.Credentials.from_service_account_file(
                 sa_key_path,
                 scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
-            sa_email = json.load(open(sa_key_path)).get("client_email", "?")
 
             _client = genai.Client(
                 vertexai=True,
@@ -76,13 +108,13 @@ def get_model():
                     f"generate_content - pin google-genai==1.47.0 in requirements.txt"
                 )
 
-
         except Exception as exc:
             _client_error = str(exc)
-            print(f"[AI] Gemini unavailable — deterministic fallbacks active. "
+            print(f"[AI] ❌ Gemini unavailable — deterministic fallbacks active. "
                   f"Reason: {exc}")
             _client = None
         _client_ready = True
+        import sys; sys.stdout.flush()
     return _client
 
 # Pre-warm in background so the SDK initialises before the first user request,
