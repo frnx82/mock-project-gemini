@@ -1287,10 +1287,10 @@ def ai_optimize():
                         rec_cost = current_cost
                 else:
                     rtype    = "Right-Sized ✅"
-                    reason   = "Resource limits configured. Enable Gemini for AI-powered right-sizing."
-                    action   = "Deploy metrics-server or configure Gemini for deeper analysis."
+                    reason   = "Resource limits configured. Enable AI for automated right-sizing."
+                    action   = "Deploy metrics-server or configure AI for deeper analysis."
                     severity = "low"
-                    insight  = "Configure Gemini or metrics-server for intelligent utilisation estimation."
+                    insight  = "Configure AI or metrics-server for intelligent utilisation estimation."
                     rec_cost = current_cost
 
                 total_recommended += rec_cost
@@ -1319,7 +1319,7 @@ def ai_optimize():
                 "total_monthly_saving":           round(total_current - total_recommended, 2),
                 "summary": (
                     f"Analysed {len(raw_workloads)} workloads via {metrics_source}. "
-                    "Gemini not configured — using spec + measured metrics checks."
+                    "AI not configured — using spec + measured metrics checks."
                 ),
                 "recommendations": recommendations
             })
@@ -1471,7 +1471,7 @@ def fetch_pod_logs_aggregated(name, namespace):
 @app.route('/api/ai/analyze_logs', methods=['POST'])
 def analyze_logs_gemini():
     if not get_model():
-        return jsonify({'analysis': "Gemini is not configured (check GCP_PROJECT_ID env var). Mock analysis unavailable in this mode."})
+        return jsonify({'analysis': "AI is not configured (check GCP_PROJECT_ID env var). Analysis unavailable in this mode."})
 
     data = request.json
     pod_name = data.get('pod_name')
@@ -1499,7 +1499,7 @@ Logs:
         response = get_model().models.generate_content(model=GEMINI_MODEL, contents=prompt)
         return jsonify({'analysis': response.text})
     except Exception as e:
-        return jsonify({'error': f"Gemini Error: {str(e)}"}), 500
+        return jsonify({'error': f"AI Error: {str(e)}"}), 500
 
 @app.route('/api/ai/security_scan')
 def security_scan():
@@ -1735,7 +1735,7 @@ def security_scan():
             for r in risks:
                 counts[r.get("severity", "Info")] = counts.get(r.get("severity", "Info"), 0) + 1
             return jsonify({
-                "executive_summary": f"Found {len(risks)} issues across {len(deploys)} deployments. Gemini not configured — running deterministic checks only.",
+                "executive_summary": f"Found {len(risks)} issues across {len(deploys)} deployments. AI not configured — running deterministic checks only.",
                 "severity_counts": counts,
                 "risks": risks
             })
@@ -2339,9 +2339,9 @@ def ai_query():
             return jsonify({
                 'action': 'chat',
                 'target': '', 'criteria': {}, 'count': None,
-                'message': '⚠️ Gemini not configured — AI search requires Gemini.',
+                'message': '⚠️ AI not configured — AI search requires configuration.',
                 'reply': (
-                    f'⚠️ **Gemini is not configured.** Ask AI and AI Chat require Gemini to function.\n\n'
+                    f'⚠️ **AI is not configured.** Ask AI and AI Chat require AI engine configuration.\n\n'
                     f'Check `/api/ai/status` to see which environment variable is missing '
                     f'(`GCP_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_REGION`).'
                 )
@@ -2450,7 +2450,7 @@ def summarize_logs():
 
         if not get_model():
             return jsonify({
-                'summary': 'Gemini not configured. Set GCP_PROJECT_ID env var to enable AI log analysis.',
+                'summary': 'AI not configured. Set GCP_PROJECT_ID env var to enable AI log analysis.',
                 'errors': [], 'recommendations': [], 'critical_errors': [], 'gemini_powered': False
             })
 
@@ -2728,7 +2728,7 @@ def ai_rca():
         if not get_model():
             return jsonify({
                 'analysis': (
-                    f"## ⚠️ Gemini Not Configured\n\n"
+                    f"## ⚠️ AI Not Configured\n\n"
                     f"Set `GCP_PROJECT_ID` and restart to enable AI-powered RCA.\n\n"
                     f"**Resource:** `{name}` | **Status:** `{status}`"
                 )
@@ -2885,7 +2885,7 @@ def correlate_logs():
 
         # 4. Call Gemini
         if not get_model():
-            msg = ('Gemini not configured. Set GCP_PROJECT_ID env var to enable AI log correlation.'
+            msg = ('AI not configured. Set GCP_PROJECT_ID env var to enable AI log correlation.'
                    f'\n\nPods that would be analysed: {sibling_pods}')
             return jsonify({'correlation': msg, 'summary': msg, 'gemini_powered': False, 'pods_analyzed': sibling_pods})
 
@@ -3300,6 +3300,260 @@ def _k8s_list_statefulsets(namespace: str) -> str:
         return f'Error listing StatefulSets: {e}'
 
 
+# ── NEW: Additional K8s Tool Functions (matching mock_app topics) ──────────
+
+def _k8s_top_pods(namespace: str) -> str:
+    """Get resource usage (CPU/memory) for pods using metrics API."""
+    try:
+        api = client.CustomObjectsApi()
+        metrics = api.list_namespaced_custom_object(
+            'metrics.k8s.io', 'v1beta1', namespace, 'pods')
+        if not metrics.get('items'):
+            return f'No metrics available in namespace {namespace}. Is metrics-server installed?'
+        lines = ['Pod | Container | CPU | Memory']
+        lines.append('-----|-----------|-----|-------')
+        for pod in metrics['items']:
+            pod_name = pod['metadata']['name']
+            for c in pod.get('containers', []):
+                lines.append(f"{pod_name} | {c['name']} | {c['usage'].get('cpu', '?')} | {c['usage'].get('memory', '?')}")
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error fetching pod metrics: {e}'
+
+
+def _k8s_list_pvcs(namespace: str) -> str:
+    """List PersistentVolumeClaims with status, capacity, and bound volume."""
+    try:
+        v1 = client.CoreV1Api()
+        pvcs = v1.list_namespaced_persistent_volume_claim(namespace)
+        if not pvcs.items:
+            return f"No PVCs found in namespace '{namespace}'."
+        lines = ['PVC Name | Status | Capacity | Access Modes | StorageClass | Volume']
+        lines.append('---------|--------|----------|--------------|--------------|-------')
+        for p in pvcs.items:
+            capacity = (p.status.capacity or {}).get('storage', '?') if p.status else '?'
+            modes = ', '.join(p.spec.access_modes or [])
+            sc = p.spec.storage_class_name or 'default'
+            vol = p.spec.volume_name or 'unbound'
+            lines.append(f'{p.metadata.name} | {p.status.phase if p.status else "?"} | {capacity} | {modes} | {sc} | {vol}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing PVCs: {e}'
+
+
+def _k8s_list_secrets(namespace: str) -> str:
+    """List secrets with type and age (never exposes secret data)."""
+    try:
+        v1 = client.CoreV1Api()
+        secrets = v1.list_namespaced_secret(namespace)
+        if not secrets.items:
+            return f"No secrets in namespace '{namespace}'."
+        lines = ['Secret Name | Type | Keys | Age']
+        lines.append('------------|------|------|----')
+        for s in secrets.items:
+            keys = ', '.join((s.data or {}).keys()) if s.data else '(empty)'
+            age = s.metadata.creation_timestamp or '?'
+            lines.append(f'{s.metadata.name} | {s.type} | {keys} | {age}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing secrets: {e}'
+
+
+def _k8s_list_rolebindings(namespace: str) -> str:
+    """List RoleBindings and ClusterRoleBindings to diagnose RBAC/permission issues."""
+    try:
+        rbac_v1 = client.RbacAuthorizationV1Api()
+        rbs = rbac_v1.list_namespaced_role_binding(namespace)
+        lines = ['RoleBinding | Role | Subjects']
+        lines.append('------------|------|----------')
+        for rb in rbs.items:
+            role = f"{rb.role_ref.kind}/{rb.role_ref.name}"
+            subjects = ', '.join(
+                f"{s.kind}:{s.name}" for s in (rb.subjects or [])
+            ) or 'none'
+            lines.append(f'{rb.metadata.name} | {role} | {subjects}')
+        # Also list relevant ClusterRoleBindings
+        try:
+            crbs = rbac_v1.list_cluster_role_binding()
+            ns_crbs = [crb for crb in crbs.items
+                       if any(s.namespace == namespace for s in (crb.subjects or []) if hasattr(s, 'namespace'))]
+            if ns_crbs:
+                lines.append('\nClusterRoleBindings affecting this namespace:')
+                for crb in ns_crbs[:10]:
+                    role = f"{crb.role_ref.kind}/{crb.role_ref.name}"
+                    lines.append(f'  {crb.metadata.name} | {role}')
+        except Exception:
+            pass
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing RBAC bindings: {e}'
+
+
+def _k8s_list_hpa(namespace: str) -> str:
+    """List Horizontal Pod Autoscalers with current/target metrics."""
+    try:
+        auto_v2 = client.AutoscalingV2Api()
+        hpas = auto_v2.list_namespaced_horizontal_pod_autoscaler(namespace)
+        if not hpas.items:
+            return f"No HPAs found in namespace '{namespace}'."
+        lines = ['HPA Name | Target | Min | Max | Current | Desired']
+        lines.append('---------|--------|-----|-----|---------|--------')
+        for h in hpas.items:
+            target = f"{h.spec.scale_target_ref.kind}/{h.spec.scale_target_ref.name}"
+            min_r = h.spec.min_replicas or 1
+            max_r = h.spec.max_replicas
+            current = h.status.current_replicas if h.status else '?'
+            desired = h.status.desired_replicas if h.status else '?'
+            lines.append(f'{h.metadata.name} | {target} | {min_r} | {max_r} | {current} | {desired}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing HPAs: {e}'
+
+
+def _k8s_list_jobs(namespace: str) -> str:
+    """List Jobs and CronJobs with completion status."""
+    try:
+        batch_v1 = client.BatchV1Api()
+        lines = []
+        # Jobs
+        jobs = batch_v1.list_namespaced_job(namespace)
+        if jobs.items:
+            lines += ['Jobs:', 'Name | Completions | Succeeded | Failed | Duration']
+            lines.append('-----|-------------|-----------|--------|--------')
+            for j in jobs.items:
+                completions = j.spec.completions or 1
+                succeeded = j.status.succeeded or 0
+                failed = j.status.failed or 0
+                duration = ''
+                if j.status.start_time and j.status.completion_time:
+                    dur = (j.status.completion_time - j.status.start_time).total_seconds()
+                    duration = f'{int(dur)}s'
+                lines.append(f'{j.metadata.name} | {completions} | {succeeded} | {failed} | {duration}')
+        # CronJobs
+        try:
+            crons = batch_v1.list_namespaced_cron_job(namespace)
+            if crons.items:
+                lines += ['', 'CronJobs:', 'Name | Schedule | Last Run | Active | Suspended']
+                lines.append('-----|----------|----------|--------|----------')
+                for c in crons.items:
+                    schedule = c.spec.schedule
+                    last = c.status.last_schedule_time or 'never'
+                    active = len(c.status.active or [])
+                    suspended = c.spec.suspend or False
+                    lines.append(f'{c.metadata.name} | {schedule} | {last} | {active} | {suspended}')
+        except Exception:
+            pass
+        return '\n'.join(lines) if lines else f"No Jobs or CronJobs in namespace '{namespace}'."
+    except Exception as e:
+        return f'Error listing jobs: {e}'
+
+
+def _k8s_list_nodes() -> str:
+    """List cluster nodes with status, capacity, and conditions."""
+    try:
+        v1 = client.CoreV1Api()
+        nodes = v1.list_node()
+        if not nodes.items:
+            return 'No nodes found in the cluster.'
+        lines = ['Node | Status | Roles | CPU | Memory | Conditions']
+        lines.append('-----|--------|-------|-----|--------|----------')
+        for n in nodes.items:
+            conditions = {c.type: c.status for c in (n.status.conditions or [])}
+            status = 'Ready' if conditions.get('Ready') == 'True' else 'NotReady'
+            roles = ', '.join(
+                k.replace('node-role.kubernetes.io/', '')
+                for k in (n.metadata.labels or {})
+                if k.startswith('node-role.kubernetes.io/')
+            ) or 'worker'
+            cpu = (n.status.capacity or {}).get('cpu', '?')
+            mem = (n.status.capacity or {}).get('memory', '?')
+            issues = [t for t, s in conditions.items() if t != 'Ready' and s == 'True']
+            lines.append(f'{n.metadata.name} | {status} | {roles} | {cpu} | {mem} | {", ".join(issues) or "OK"}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing nodes: {e}'
+
+
+def _k8s_check_endpoints(namespace: str, service_name: str = '') -> str:
+    """Check service endpoints to diagnose networking/DNS issues."""
+    try:
+        v1 = client.CoreV1Api()
+        if service_name:
+            try:
+                ep = v1.read_namespaced_endpoints(service_name, namespace)
+                eps = [ep]
+            except Exception:
+                return f"Endpoints for service '{service_name}' not found."
+        else:
+            ep_list = v1.list_namespaced_endpoints(namespace)
+            eps = ep_list.items
+
+        lines = ['Service | Ready Addresses | Not-Ready | Ports']
+        lines.append('--------|-----------------|-----------|------')
+        for ep in eps:
+            name = ep.metadata.name
+            ready_count = 0
+            not_ready_count = 0
+            ports_str = ''
+            for subset in (ep.subsets or []):
+                ready_count += len(subset.addresses or [])
+                not_ready_count += len(subset.not_ready_addresses or [])
+                ports_str = ', '.join(f'{p.port}/{p.protocol}' for p in (subset.ports or []))
+            lines.append(f'{name} | {ready_count} | {not_ready_count} | {ports_str}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error checking endpoints: {e}'
+
+
+def _k8s_namespace_summary(namespace: str) -> str:
+    """Get a comprehensive namespace health summary: pod counts, resource quotas, limits."""
+    try:
+        v1 = client.CoreV1Api()
+        apps_v1 = client.AppsV1Api()
+        lines = [f'=== Namespace Summary: {namespace} ===\n']
+
+        # Pod summary
+        pods = v1.list_namespaced_pod(namespace).items
+        running = sum(1 for p in pods if p.status.phase == 'Running')
+        pending = sum(1 for p in pods if p.status.phase == 'Pending')
+        failed = sum(1 for p in pods if p.status.phase == 'Failed')
+        total_restarts = sum(
+            sum(c.restart_count for c in (p.status.container_statuses or []))
+            for p in pods
+        )
+        lines.append(f'Pods: {len(pods)} total | {running} running | {pending} pending | {failed} failed | {total_restarts} total restarts')
+
+        # Deployments
+        deps = apps_v1.list_namespaced_deployment(namespace).items
+        healthy_deps = sum(1 for d in deps if (d.status.ready_replicas or 0) == (d.spec.replicas or 0))
+        lines.append(f'Deployments: {len(deps)} total | {healthy_deps} healthy')
+
+        # Services
+        svcs = v1.list_namespaced_service(namespace).items
+        lines.append(f'Services: {len(svcs)}')
+
+        # Resource quotas
+        try:
+            quotas = v1.list_namespaced_resource_quota(namespace).items
+            if quotas:
+                lines.append('\nResource Quotas:')
+                for q in quotas:
+                    for res, used in (q.status.used or {}).items():
+                        hard = (q.status.hard or {}).get(res, '?')
+                        lines.append(f'  {res}: {used} / {hard}')
+        except Exception:
+            pass
+
+        # Recent warnings
+        evs = v1.list_namespaced_event(namespace).items
+        warnings = [e for e in evs if e.type == 'Warning']
+        lines.append(f'\nWarning events (last 24h): {len(warnings)}')
+
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error generating namespace summary: {e}'
+
+
 # ── Gemini Tool Declarations ───────────────────────────────────────────────
 
 _STR = _genai_types.Schema(type='STRING')
@@ -3382,6 +3636,61 @@ K8S_TOOLS = _genai_types.Tool(function_declarations=[
         parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
                             required=['namespace'])
     ),
+    # ── NEW: 9 additional tools matching mock_app coverage ─────────────────
+    _genai_types.FunctionDeclaration(
+        name='k8s_top_pods',
+        description='Get real-time CPU and memory usage for all pods using metrics-server. Use for memory/OOM and CPU/throttling questions.',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_list_pvcs',
+        description='List PersistentVolumeClaims with status (Bound/Pending), capacity, access modes, and storage class.',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_list_secrets',
+        description='List secrets with type and key names (never exposes actual secret values). Use for credential/TLS troubleshooting.',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_list_rolebindings',
+        description='List RoleBindings and ClusterRoleBindings in the namespace. Use to diagnose RBAC permission issues (403 Forbidden, access denied).',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_list_hpa',
+        description='List Horizontal Pod Autoscalers with min/max replicas, current/desired counts, and scaling targets.',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_list_jobs',
+        description='List Jobs (with completions, succeeded, failed counts) and CronJobs (with schedule, last run, suspended status).',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_list_nodes',
+        description='List all cluster nodes with Ready/NotReady status, roles, CPU/memory capacity, and conditions (MemoryPressure, DiskPressure).',
+        parameters=_schema({})
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_check_endpoints',
+        description='Check service endpoints to diagnose networking and DNS issues. Shows ready/not-ready addresses per service.',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                             'service_name': ('STRING', 'Optional service name to check specific endpoints')},
+                            required=['namespace'])
+    ),
+    _genai_types.FunctionDeclaration(
+        name='k8s_namespace_summary',
+        description='Get a comprehensive namespace health overview: pod counts by phase, deployment health, service count, resource quotas, and warning event count.',
+        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                            required=['namespace'])
+    ),
 ])
 
 # Dispatcher: maps function name → Python function call
@@ -3396,6 +3705,16 @@ _K8S_TOOL_MAP = {
     'k8s_get_configmap':         lambda a: _k8s_get_configmap(**a),
     'k8s_get_namespace_events':  lambda a: _k8s_get_namespace_events(**a),
     'k8s_list_statefulsets':     lambda a: _k8s_list_statefulsets(**a),
+    # NEW tools
+    'k8s_top_pods':              lambda a: _k8s_top_pods(**a),
+    'k8s_list_pvcs':             lambda a: _k8s_list_pvcs(**a),
+    'k8s_list_secrets':          lambda a: _k8s_list_secrets(**a),
+    'k8s_list_rolebindings':     lambda a: _k8s_list_rolebindings(**a),
+    'k8s_list_hpa':              lambda a: _k8s_list_hpa(**a),
+    'k8s_list_jobs':             lambda a: _k8s_list_jobs(**a),
+    'k8s_list_nodes':            lambda a: _k8s_list_nodes(),
+    'k8s_check_endpoints':       lambda a: _k8s_check_endpoints(**a),
+    'k8s_namespace_summary':     lambda a: _k8s_namespace_summary(**a),
 }
 
 
@@ -3411,7 +3730,7 @@ def converse():
         return jsonify({'error': 'No message provided'}), 400
 
     if not get_model():
-        return jsonify({'reply': f'⚠️ Gemini not configured ({_client_error}). '
+        return jsonify({'reply': f'⚠️ AI not configured ({_client_error}). '
                                   'Check /api/ai/status for details.'})
 
     try:
@@ -3420,13 +3739,17 @@ def converse():
         # System instruction for the agent
         system_instruction = (
             f"You are an expert Kubernetes SRE agent embedded in the GDC Dashboard "
-            f"for namespace '{namespace}'. You have access to live Kubernetes API tools. "
+            f"for namespace '{namespace}'. You have access to 19 live Kubernetes API tools. "
             f"When the user asks a question:\n"
             f"1. Use the available tools to fetch REAL live data from the cluster\n"
             f"2. Reason over the actual data returned\n"
             f"3. Give a direct, specific, data-backed answer — never say 'run this command yourself'\n"
             f"4. Use Markdown formatting with tables where helpful\n"
-            f"5. Be concise and actionable\n"
+            f"5. Be concise and actionable\n\n"
+            f"You can troubleshoot: pods, deployments, statefulsets, services, configmaps, "
+            f"events, logs, memory/OOM, CPU/throttling, PVC/storage, secrets, RBAC/permissions, "
+            f"HPA/autoscaling, jobs/cronjobs, node health, networking/DNS endpoints, "
+            f"and overall namespace health.\n\n"
             f"Current namespace: {namespace}"
         )
 
@@ -3468,7 +3791,7 @@ def converse():
 
             candidate = response.candidates[0] if response.candidates else None
             if not candidate:
-                final_reply = '⚠️ No response from Gemini.'
+                final_reply = '⚠️ No response from AI engine.'
                 break
 
             # Collect all function calls from this response
@@ -3531,7 +3854,7 @@ def converse():
 
     except Exception as e:
         print(f'[converse] Error: {e}')
-        return jsonify({'error': f'Gemini error: {str(e)}'}), 500
+        return jsonify({'error': f'AI error: {str(e)}'}), 500
 
 @app.route('/api/ai/converse/reset', methods=['POST'])
 def converse_reset():
@@ -3553,7 +3876,7 @@ def generate_yaml():
         return jsonify({'error': 'description is required'}), 400
 
     if not get_model():
-        return jsonify({'yaml': '# Gemini not configured. Set GCP_PROJECT_ID to enable YAML generation.'})
+        return jsonify({'yaml': '# AI not configured. Set GCP_PROJECT_ID to enable YAML generation.'})
 
     try:
         prompt = f"""You are a Kubernetes YAML expert. Generate valid, production-ready Kubernetes YAML based on the following description.
@@ -3581,7 +3904,7 @@ Output the raw YAML only:"""
 
         return jsonify({'yaml': yaml_text})
     except Exception as e:
-        return jsonify({'error': f'Gemini error: {str(e)}'}), 500
+        return jsonify({'error': f'AI error: {str(e)}'}), 500
 
 
 # ═══════════════════════════════════════════════════════════
@@ -3723,7 +4046,7 @@ def analyze_workload():
             return jsonify({
                 'health_score': score,
                 'health_status': health,
-                'summary': f'{kind} {name}: {ready}/{desired} replicas ready. Gemini not configured — basic health check only.',
+                'summary': f'{kind} {name}: {ready}/{desired} replicas ready. AI not configured — basic health check only.',
                 'risks': [] if health == 'Healthy' else [{'severity': 'High', 'description': f'Only {ready}/{desired} replicas are ready.', 'action': 'Check pod logs and events for crash details.'}],
                 'kubectl_hints': [f'kubectl get pods -l app={name} -n {namespace}', f'kubectl describe {kind.lower()} {name} -n {namespace}'],
                 'gemini_powered': False
@@ -3866,7 +4189,7 @@ def diagnose_workload():
             score = 100 if verdict == 'Healthy' else max(0, int(ratio * 100))
             return jsonify({
                 'health_score': score, 'verdict': verdict, 'verdict_color': verdict_color, 'verdict_icon': verdict_icon,
-                'summary': f'{kind} {name}: {ready}/{desired} replicas ready. Gemini not configured — basic check only.',
+                'summary': f'{kind} {name}: {ready}/{desired} replicas ready. AI not configured — basic check only.',
                 'risks': [] if verdict == 'Healthy' else [{'severity': 'High', 'description': f'Only {ready}/{desired} replicas ready.', 'action': f'kubectl get pods -l app={name} -n {namespace}'}],
                 'positive_signals': ['All replicas healthy', 'Resource limits set', 'Probes configured'] if verdict == 'Healthy' else [],
                 'replica_advice': replica_advice,
@@ -4123,8 +4446,8 @@ def job_insights():
             status = 'Succeeded' if succeeded >= completions else ('Failed' if failed > 0 else 'Running')
             return jsonify({
                 'status': status,
-                'summary': f'Job {job_name}: {succeeded}/{completions} succeeded, {failed} failed. Gemini not configured.',
-                'failure_reason': 'N/A (Gemini not configured)',
+                'summary': f'Job {job_name}: {succeeded}/{completions} succeeded, {failed} failed. AI not configured.',
+                'failure_reason': 'N/A (AI not configured)',
                 'retry_strategy': 'Review backoffLimit and check pod logs manually.',
                 'kubectl_hints': [f'kubectl logs -l job-name={job_name} -n {namespace}'],
                 'gemini_powered': False
@@ -4209,7 +4532,7 @@ def explain_resource():
 
         if not get_model():
             return jsonify({
-                'purpose': f'{kind} {name} — Gemini not configured.',
+                'purpose': f'{kind} {name} — AI not configured.',
                 'key_breakdown': {},
                 'security_concerns': [],
                 'recommendations': ['Set GCP_PROJECT_ID to enable AI explanations.'],
@@ -4604,7 +4927,7 @@ def pod_triage():
 
         fallback = {
             'pod': name,
-            'triage_summary': f'Pod {name} triage — Gemini not configured.',
+            'triage_summary': f'Pod {name} triage — AI not configured.',
             'crash_reason': None,
             'restart_advised': restart_advised,
             'error_patterns': [],
@@ -5092,7 +5415,7 @@ def service_risk():
         if not get_model():
             return jsonify({'service': name, 'risk_level': risk_level,
                             'risk_summary': f'Service {name} ({svc_type}) risk assessment.',
-                            'risks': [{'severity': 'info', 'issue': 'Gemini not configured.', 'fix': 'Set GCP_PROJECT_ID.'}],
+                            'risks': [{'severity': 'info', 'issue': 'AI not configured.', 'fix': 'Set GCP_PROJECT_ID.'}],
                             'kubectl_hints': [f'kubectl describe service {name}'], 'gemini_powered': False})
 
         prompt = (
@@ -5206,7 +5529,7 @@ def vs_traffic_policy():
         fallback = {
             'virtual_service': name,
             'policy_summary': f'Traffic policy analysis for {name}.',
-            'canary_health': {'status': 'unknown', 'recommendation': 'Gemini not configured.'},
+            'canary_health': {'status': 'unknown', 'recommendation': 'AI not configured.'},
             'missing_policies': [], 'traffic_risks': [],
             'kubectl_hints': [f'kubectl get virtualservice {name} -o yaml'],
             'gemini_powered': False
@@ -5489,7 +5812,7 @@ def ai_chat_compat():
         return jsonify({'reply': 'No message provided'}), 400
 
     if not get_model():
-        return jsonify({'reply': f'⚠️ Gemini not configured ({_client_error}). '
+        return jsonify({'reply': f'⚠️ AI not configured ({_client_error}). '
                                  f'Check /api/ai/status for details.'})
     try:
         resp = get_model().models.generate_content(
@@ -5498,7 +5821,7 @@ def ai_chat_compat():
         )
         return jsonify({'reply': resp.text.strip()})
     except Exception as e:
-        return jsonify({'reply': f'Gemini error: {e}'}), 500
+        return jsonify({'reply': f'AI error: {e}'}), 500
 
 
 # ── Terminal / Console — Real K8s Exec via Socket.IO ────────────────────────

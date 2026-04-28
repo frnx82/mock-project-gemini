@@ -20,6 +20,73 @@ def get_mock_timestamp(minutes_ago):
 def index():
     return render_template('index.html')
 
+@app.route('/api/ping')
+def api_ping():
+    """Ultra-lightweight keepalive — no K8s call, just proves the worker is alive."""
+    return 'ok', 200
+
+@app.route('/api/auth/status')
+def api_auth_status():
+    """Auth status check — proves auth is valid."""
+    return jsonify({
+        'authenticated': True,
+        'ts': datetime.utcnow().isoformat()
+    })
+
+@app.route('/api/health')
+def api_health():
+    """Lightweight liveness ping."""
+    return jsonify({'ok': True, 'ts': datetime.utcnow().isoformat()})
+
+@app.route('/api/ai/status')
+def api_ai_status():
+    """AI readiness status — mock always returns ready."""
+    return jsonify({
+        'available': True,
+        'model': 'gemini-2.5-flash (mock)',
+        'status': 'ready',
+        'cache_entries': 0,
+        'error': None
+    })
+
+@app.route('/api/pod-stats')
+def get_pod_stats():
+    """Mock pod phase statistics."""
+    namespace = request.args.get('namespace', 'default')
+    return jsonify({
+        'Running': 5,
+        'Pending': 1,
+        'Succeeded': 2,
+        'Failed': 2,
+        'Unknown': 0
+    })
+
+@app.route('/api/vuln_scan/debug')
+def vuln_scan_debug():
+    """Mock Trivy diagnostic endpoint."""
+    namespace = request.args.get('namespace', 'default')
+    return jsonify({
+        'trivy_binary': '/usr/local/bin/trivy (mock)',
+        'trivy_version': 'Version: 0.52.0 (mock)',
+        'db_status': 'OK',
+        'test_scan_alpine': 'SUCCESS — found 3 vulnerabilities in alpine:3.19 (mock)',
+        'namespace': namespace,
+        'images_found': [
+            'frontend:v2.4.1',
+            'backend-api:v3.1.2',
+            'billing-service:v1.12.0',
+            'ml-inference:v0.9.5-beta',
+            'postgres:15',
+            'envoy:v1.27.0',
+            'fluentbit:2.2.0'
+        ],
+        'image_count': 7,
+        'test_real_image': 'backend-api:v3.1.2',
+        'test_real_result': 'SUCCESS — found 12 vulnerabilities (mock)',
+        'status': 'OK',
+        'message': 'Mock diagnostic — all checks simulated as passing.'
+    })
+
 @app.route('/api/workloads')
 def get_workloads():
     namespace = request.args.get('namespace', 'default')
@@ -227,7 +294,7 @@ def explain_configmap():
 @app.route('/api/ai/optimize')
 def ai_optimize():
 
-    """Mock Gemini-powered optimizer with full new schema including metrics fields."""
+    """Mock AI-powered optimizer with full new schema including metrics fields."""
     import time
     time.sleep(2.0)  # simulate Gemini analysis latency
 
@@ -440,7 +507,7 @@ def ai_optimize():
         "total_recommended_monthly_cost": round(total_recommended, 2),
         "total_monthly_saving":           round(total_saving, 2),
         "summary": (
-            f"Gemini analysed {len(recommendations)} workloads using AI-estimated usage (no metrics-server found). "
+            f"AI analysed {len(recommendations)} workloads using AI-estimated usage (no metrics-server found). "
             f"Current estimated monthly cost is €{total_current:.0f}/month at €60/core. "
             f"Key savings: billing-service (4 cores → 650m, billed on requests), redis-cache (2 cores → 100m), "
             f"and the log-collector DaemonSet are the biggest over-provisioning offenders. "
@@ -454,7 +521,7 @@ def ai_optimize():
 
 @app.route('/api/ai/query', methods=['POST'])
 def ai_query():
-    """Mock Gemini-powered NLU command interpreter.
+    """Mock AI-powered NLU command interpreter.
     Simulates Gemini intent classification — returns the exact same JSON schema
     as the real endpoint so the frontend handler works identically.
     """
@@ -541,7 +608,7 @@ def ai_query():
                 "or ask me to generate a YAML template."
             )
         return jsonify({'action': 'explain', 'target': '', 'criteria': {}, 'count': None,
-                        'message': '💡 Gemini answered your Kubernetes question.',
+                        'message': '💡 AI answered your Kubernetes question.',
                         'reply': reply})
 
     # ── Intent classification (mimics Gemini's output) ─────────────────────
@@ -715,7 +782,7 @@ def ai_query():
                 "or ask me to generate a YAML template."
             )
         return jsonify({'action': 'explain', 'target': '', 'criteria': {}, 'count': None,
-                        'message': '💡 Gemini answered your Kubernetes question.',
+                        'message': '💡 AI answered your Kubernetes question.',
                         'reply': reply})
 
     elif "help" in q or "what can you" in q or "commands" in q:
@@ -723,7 +790,7 @@ def ai_query():
             'action': 'explain', 'target': '', 'criteria': {}, 'count': None,
             'message': '🤖 Here\'s what I can do for you.',
             'reply': (
-                "I'm your Gemini-powered Kubernetes assistant. I understand natural language — just type what you need:\n\n"
+                "I'm your AI-powered Kubernetes assistant. I understand natural language — just type what you need:\n\n"
                 "**Filter:** \"show failed pods\", \"list running deployments\"\n"
                 "**Actions:** \"scale billing to 3\", \"restart frontend\", \"delete pod xyz\"\n"
                 "**Diagnose:** \"why is payment crashing\", \"analyze checkout-service\"\n"
@@ -738,7 +805,7 @@ def ai_query():
     else:
         return jsonify({
             'action': 'chat', 'target': '', 'criteria': {}, 'count': None,
-            'message': f'🤖 Gemini: here\'s what I found.',
+            'message': f'🤖 AI: here\'s what I found.',
             'reply': (
                 f"I interpreted your query as a general question about this namespace. "
                 f"For \"**{query}**\" — I can help more specifically if you mention a resource name, action, or topic. "
@@ -870,42 +937,182 @@ def get_resource_events(name):
 
 @app.route('/api/yaml/<name>')
 def get_resource_yaml(name):
-    # type and namespace are passed as query args
+    """Return a realistic YAML manifest for any resource by looking up actual mock data."""
     kind = request.args.get('type', 'Pod')
     ns = request.args.get('namespace', 'default')
-    
-    # Mock YAML
-    mock_yaml = {
-        "apiVersion": "v1" if kind == "Pod" else "apps/v1",
-        "kind": kind,
-        "metadata": {
-            "name": name,
-            "namespace": ns,
-            "labels": {"app": name.split('-')[0]}
-        },
-        "spec": {
-            "containers": [{
-                "name": "main",
-                "image": "nginx:latest",
-                "resources": {
-                    "requests": {"cpu": "100m", "memory": "128Mi"},
-                    "limits": {"cpu": "200m", "memory": "256Mi"}
+    prefix = f"{ns}-" if ns != 'default' else ""
+
+    # ── Look up from services ──
+    if kind == 'Service':
+        svc_data = [
+            {'name': 'frontend', 'type': 'LoadBalancer', 'cluster_ip': '10.0.0.1', 'ports': '80:3000'},
+            {'name': 'backend-api', 'type': 'ClusterIP', 'cluster_ip': '10.0.0.2', 'ports': '8080'},
+            {'name': 'database-svc', 'type': 'ClusterIP', 'cluster_ip': '10.0.0.3', 'ports': '5432'},
+        ]
+        svc = next((s for s in svc_data if s['name'] == name), None)
+        if svc:
+            port_str = svc['ports']
+            port_parts = port_str.split(':')
+            port = int(port_parts[0])
+            target_port = int(port_parts[1]) if len(port_parts) > 1 else port
+            mock_yaml = {
+                "apiVersion": "v1",
+                "kind": "Service",
+                "metadata": {"name": svc['name'], "namespace": ns, "labels": {"app": svc['name']}},
+                "spec": {
+                    "type": svc['type'],
+                    "selector": {"app": svc['name']},
+                    "ports": [{"port": port, "targetPort": target_port, "protocol": "TCP"}],
+                    "clusterIP": svc['cluster_ip'],
                 }
-            }]
-        }
-    }
-    
-    # If the request asks for specific type, we wrap it properly
-    if kind in ['Deployment', 'StatefulSet', 'DaemonSet']:
-        mock_yaml['spec'] = {
-            "replicas": 1,
-            "selector": {"matchLabels": {"app": name.split('-')[0]}},
-            "template": {
-                "metadata": {"labels": {"app": name.split('-')[0]}},
-                "spec": mock_yaml['spec']
+            }
+            return jsonify({'yaml': mock_yaml})
+
+    # ── Look up from virtualservices ──
+    if kind == 'VirtualService':
+        mock_yaml = {
+            "apiVersion": "networking.istio.io/v1beta1",
+            "kind": "VirtualService",
+            "metadata": {"name": name, "namespace": ns},
+            "spec": {
+                "hosts": [name.replace('-vs', '')],
+                "gateways": ["istio-ingressgateway"],
+                "http": [{"route": [{"destination": {"host": name.replace('-vs', ''), "port": {"number": 8080}}, "weight": 100}]}]
             }
         }
+        return jsonify({'yaml': mock_yaml})
 
+    # ── Look up from workloads (Deployment, StatefulSet, DaemonSet, Pod, Job, ConfigMap, Secret) ──
+    # Build workloads list (simplified — no request context for get_workloads)
+    workloads = []
+    deployments = [
+        {'name': f'{prefix}frontend-deployment', 'image': 'frontend:v2.4.1', 'replicas': 1, 'labels': {'app': 'frontend', 'chart': 'frontend-1.8.0', 'team': 'platform'}},
+        {'name': f'{prefix}backend-api', 'image': 'backend-api:v3.1.2', 'replicas': 2, 'labels': {'app': 'backend-api', 'chart': 'backend-2.5.0', 'team': 'core'}},
+        {'name': f'{prefix}billing-service', 'image': 'billing-service:v1.12.0', 'replicas': 3, 'labels': {'app': 'billing', 'chart': 'billing-3.1.0', 'team': 'finance'}},
+        {'name': f'{prefix}ml-inference', 'image': 'ml-inference:v0.9.5-beta', 'replicas': 1, 'labels': {'app': 'ml-inference', 'chart': 'ml-inference-0.3.2', 'team': 'ml'}},
+    ]
+
+    # Check for scaling overrides
+    global MOCK_SCALES
+    if 'MOCK_SCALES' not in globals():
+        MOCK_SCALES = {}
+
+    if kind in ('Deployment', 'StatefulSet', 'DaemonSet'):
+        dep = next((d for d in deployments if d['name'] == name), None)
+        replicas = MOCK_SCALES.get(name, dep['replicas'] if dep else 1)
+        image = dep['image'] if dep else f'{name.split("-")[0]}:latest'
+        labels = dep.get('labels', {'app': name.split('-')[0]}) if dep else {'app': name.split('-')[0]}
+
+        api_version = "apps/v1"
+        if kind == 'StatefulSet':
+            image = 'postgres:15.4'
+            labels = {'app': 'database', 'component': 'postgresql'}
+
+        mock_yaml = {
+            "apiVersion": api_version,
+            "kind": kind,
+            "metadata": {"name": name, "namespace": ns, "labels": labels},
+            "spec": {
+                "replicas": replicas,
+                "selector": {"matchLabels": {"app": labels.get('app', name.split('-')[0])}},
+                "template": {
+                    "metadata": {"labels": {"app": labels.get('app', name.split('-')[0])}},
+                    "spec": {
+                        "containers": [{
+                            "name": "main",
+                            "image": image,
+                            "ports": [{"containerPort": 8080}],
+                            "resources": {
+                                "requests": {"cpu": "100m", "memory": "128Mi"},
+                                "limits": {"cpu": "500m", "memory": "512Mi"}
+                            },
+                            "env": [
+                                {"name": "APP_ENV", "value": ns},
+                                {"name": "LOG_LEVEL", "value": "info"},
+                            ]
+                        }]
+                    }
+                }
+            }
+        }
+        return jsonify({'yaml': mock_yaml})
+
+    if kind == 'Pod':
+        # Find matching pod
+        pod_containers = {
+            'frontend-pod-1': [{'name': 'nginx', 'image': 'frontend:v2.4.1'}],
+            'backend-pod-multi': [{'name': 'api-server', 'image': 'backend-api:v3.1.2'}, {'name': 'sidecar-proxy', 'image': 'envoy:v1.28'}],
+            'payment-processor-0': [{'name': 'processor', 'image': 'payment-service:v2.0.1'}],
+            'analytics-job-oom': [{'name': 'spark-driver', 'image': 'spark:3.5.0'}],
+            'sidecar-missing': [{'name': 'main', 'image': 'app:v1.0'}, {'name': 'sidecar', 'image': 'invalid-registry/sidecar:missing'}],
+            'api-gateway-v2': [{'name': 'gateway', 'image': 'api-gateway:v2.0.0-rc1'}],
+            'init-demo-pod': [{'name': 'app', 'image': 'demo-app:latest'}],
+        }
+        short_name = name.replace(prefix, '')
+        containers = pod_containers.get(short_name, [{'name': 'main', 'image': f'{name}:latest'}])
+        mock_yaml = {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {"name": name, "namespace": ns, "labels": {"app": short_name.split('-')[0]}},
+            "spec": {
+                "containers": [{
+                    "name": c['name'],
+                    "image": c['image'],
+                    "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": {"cpu": "500m", "memory": "512Mi"}},
+                } for c in containers]
+            }
+        }
+        return jsonify({'yaml': mock_yaml})
+
+    if kind == 'ConfigMap':
+        cm_data = {
+            'app-config': {"DATABASE_URL": "postgresql://db:5432/app", "CACHE_TTL": "300", "LOG_LEVEL": "info", "MAX_CONNECTIONS": "50"},
+            'nginx-config': {"nginx.conf": "server { listen 80; location / { proxy_pass http://backend:8080; } }"},
+        }
+        short_name = name.replace(prefix, '')
+        mock_yaml = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": ns},
+            "data": cm_data.get(short_name, {"config.yaml": "key: value"})
+        }
+        return jsonify({'yaml': mock_yaml})
+
+    if kind == 'Secret':
+        mock_yaml = {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {"name": name, "namespace": ns},
+            "type": "Opaque",
+            "data": {"username": "YWRtaW4=", "password": "c3VwZXItc2VjcmV0LXBhc3N3b3Jk"}
+        }
+        return jsonify({'yaml': mock_yaml})
+
+    if kind == 'Job':
+        mock_yaml = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": {"name": name, "namespace": ns},
+            "spec": {
+                "completions": 1,
+                "parallelism": 1,
+                "template": {
+                    "spec": {
+                        "restartPolicy": "Never",
+                        "containers": [{"name": "job", "image": f"{name.split('-')[0]}-runner:latest", "command": ["python", "run.py"]}]
+                    }
+                }
+            }
+        }
+        return jsonify({'yaml': mock_yaml})
+
+    # Fallback
+    mock_yaml = {
+        "apiVersion": "v1",
+        "kind": kind,
+        "metadata": {"name": name, "namespace": ns},
+        "spec": {}
+    }
     return jsonify({'yaml': mock_yaml})
 
 @app.route('/api/ai/analyze_logs', methods=['POST'])
@@ -916,7 +1123,7 @@ def mock_analyze_logs():
     import time
     time.sleep(1.5)
     return jsonify({
-        'analysis': f"""## Gemini Analysis for {pod_name} ♊
+        'analysis': f"""## AI Analysis for {pod_name} ♊
         
 **Root Cause**: The application failed to connect to the database.
 **Error Pattern**: `ConnectionRefusedError: [Errno 111] Connection refused` found in `main` container logs.
@@ -935,7 +1142,7 @@ def mock_chat():
     import time
     time.sleep(1.0)
     
-    response = f"I am a Mock Gemini Agent. You asked: '{message}'.\n\nI can help you analyze logs or check resource status."
+    response = f"I am a Mock AI Agent. You asked: '{message}'.\n\nI can help you analyze logs or check resource status."
     
     if "why" in message.lower() or "error" in message.lower():
         response = """**Potential Issue Detected** ⚠️
@@ -956,7 +1163,7 @@ def delete_resource():
 
 @app.route('/api/ai/rca', methods=['POST'])
 def ai_rca():
-    """Mock Gemini-powered RCA. Returns structured SRE-quality analysis
+    """Mock AI-powered RCA. Returns structured SRE-quality analysis
     matching the exact output format of the real Gemini endpoint.
     """
     import time
@@ -1096,7 +1303,7 @@ No immediate action required. Continue monitoring.
 
 @app.route('/api/ai/security_scan')
 def security_scan():
-    """Mock Gemini-powered comprehensive security audit.
+    """Mock AI-powered comprehensive security audit.
     Returns rich findings across all 9 categories matching the real endpoint schema.
     """
     import time
@@ -1478,7 +1685,7 @@ def get_configmap(name):
 
 @app.route('/api/ai/describe_workload', methods=['POST'])
 def describe_workload_ai():
-    """Mock Gemini-powered workload config analysis."""
+    """Mock AI-powered workload config analysis."""
     import time
     time.sleep(1.0)
     data = request.json or {}
@@ -1515,7 +1722,7 @@ def describe_workload_ai():
             f'**{kind}** `{name}` (namespace: `{ns}`) is configured with {len(env_vars)} environment variables '
             f'across {len(set(e.get("container") for e in env_vars))} container(s). '
             f'It references {len(cms)} ConfigMap(s) for application settings and {len(secrets)} Secret(s) for credentials. '
-            f'Gemini detected {len([f for f in flags if f["severity"] == "high"])} high-severity and '
+            f'AI detected {len([f for f in flags if f["severity"] == "high"])} high-severity and '
             f'{len([f for f in flags if f["severity"] == "medium"])} medium-severity configuration issues.'
         ),
         'security_flags': flags or [{'severity': 'low', 'message': 'No critical configuration issues detected.'}],
@@ -1691,7 +1898,68 @@ def mock_converse():
     msg_lower = message.lower()
 
     # Simulate Gemini Function Calling agent responses
-    if any(x in msg_lower for x in ['crash', 'failing', 'broken', 'down', 'why', 'error']):
+    # Priority routing: check specific sub-topics FIRST before generic handlers
+    _is_restart = any(x in msg_lower for x in ['restart', 'crashloop', 'back-off', 'backoff', 'keeps restarting'])
+    _is_imagepull = any(x in msg_lower for x in ['imagepull', 'registry', 'image pull'])
+
+    if _is_restart:
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_pods(field_selector=status.phase!=Running)` → 2 unhealthy
+> `k8s_get_pod_restart_counts()` → checking restart history
+
+---
+
+**Pods with Restart Issues:**
+
+| Pod | Restarts | Status | Last Exit | Reason |
+|---|---|---|---|---|
+| `payment-processor-0` | **8** | CrashLoopBackOff | 3m ago | Error (exit 1) |
+| `analytics-job-oom` | **3** | OOMKilled | 1h ago | OOMKilled (exit 137) |
+
+**Root Cause — `payment-processor-0`:**
+```
+[FATAL] ConnectionRefused: cannot reach postgres at 10.0.0.5:5432
+[FATAL] panic: nil pointer dereference in main.connectDB
+```
+→ Database pod is healthy but the connection string may be wrong.
+
+**Fix:**
+```bash
+kubectl describe pod payment-processor-0   # Check DB_HOST env var
+kubectl rollout restart statefulset/database-statefulset
+kubectl logs payment-processor-0 --previous   # See crash logs
+```"""
+
+    elif _is_imagepull:
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_get_pod_images(namespace=default)` → scanning images
+
+---
+
+**Container Images in Namespace:**
+
+| Pod | Container | Image | Status |
+|---|---|---|---|
+| `frontend-6c8d` | main | `frontend:v2.4.1` | ✅ Running |
+| `backend-api-9a1` | main | `backend-api:v3.1.2` | ✅ Running |
+| `billing-service-8b7` | main | `billing:v1.12.0` | ✅ Running |
+| `ml-inference-4d2` | main | `ml-inference:v0.9.5-beta` | ✅ Running |
+| `payment-processor-0` | processor | `payment:v1.8.3` | ❌ CrashLoop |
+
+**⚠️ No ImagePullBackOff issues detected.**
+
+**If you see ImagePullBackOff:**
+```bash
+kubectl describe pod <pod-name>    # Check Events for pull error
+# Common fixes:
+# 1. Wrong image name/tag → fix in deployment spec
+# 2. Private registry → add imagePullSecrets
+# 3. Image doesn't exist → verify in container registry
+```"""
+
+    elif any(x in msg_lower for x in ['crash', 'failing', 'broken', 'why is', 'what is wrong', 'not working']):
         reply = """🔍 **Calling live K8s tools...**
 
 > `k8s_list_pods` → found 2 unhealthy pods  
@@ -1719,7 +1987,7 @@ kubectl get pods -w  # Watch recovery
 
 Should I also check if `database-statefulset` is healthy?"""
 
-    elif any(x in msg_lower for x in ['helm', 'chart', 'version', 'image']):
+    elif any(x in msg_lower for x in ['helm', 'chart', 'version']) or ('image' in msg_lower and not any(x in msg_lower for x in ['imagepull', 'pull', 'registry'])):
         reply = """🔍 **Calling live K8s tools...**
 
 > `k8s_get_deployment_status(payment-service)` → fetching live deployment spec
@@ -1741,7 +2009,7 @@ Should I also check if `database-statefulset` is healthy?"""
 
 All containers are running on image versions from the last deploy 3 days ago."""
 
-    elif any(x in msg_lower for x in ['pod', 'list', 'status', 'running']):
+    elif ('pod' in msg_lower and any(x in msg_lower for x in ['list', 'status', 'show', 'all'])) or msg_lower.strip() in ['pods', 'list pods', 'show pods', 'running pods', 'all pods']:
         reply = """🔍 **Calling live K8s tools...**
 
 > `k8s_list_pods(namespace=default)` → 9 pods found
@@ -1795,7 +2063,7 @@ All containers are running on image versions from the last deploy 3 days ago."""
 | `cache-svc` | ClusterIP | 10.0.1.54 | 6379/TCP→6379 |
 | `monitoring-svc` | NodePort | 10.0.1.55 | 9090/TCP→9090 |"""
 
-    elif any(x in msg_lower for x in ['configmap', 'config']):
+    elif any(x in msg_lower for x in ['configmap', 'app-config']) or (msg_lower.strip() in ['config', 'show config', 'show configmap']):
         reply = """🔍 **Calling live K8s tools...**
 
 > `k8s_get_configmap(app-config)` → fetched 6 keys
@@ -1815,25 +2083,474 @@ All containers are running on image versions from the last deploy 3 days ago."""
 
 ⚠️ Note: `DB_HOST` is set to the K8s service DNS — this is correct for in-cluster access."""
 
-    elif any(x in msg_lower for x in ['help', 'what can', 'capabilit']):
-        reply = """I'm your **GDC Cluster Agent** — powered by Gemini with **live Kubernetes API access**.
+    elif any(x in msg_lower for x in ['memory', 'oom', 'ram', 'heap', 'memory limit', 'memory usage']):
+        reply = """🔍 **Calling live K8s tools...**
 
-I can call these tools in real-time:
+> `k8s_top_pods(namespace=default)` → fetched resource usage
+> `k8s_describe_pod(*)` → checking OOM events
 
-| Tool | What I fetch | Example question |
+---
+
+**Memory Usage by Pod:**
+
+| Pod | Usage | Request | Limit | % of Limit |
+|---|---|---|---|---|
+| `database-statefulset-0` | **241 MiB** | 256Mi | 256Mi | ⚠️ **94%** |
+| `billing-service-8b7` | 380 MiB | 2Gi | 8Gi | 4.6% |
+| `analytics-job-oom` | **OOMKilled** | 4Gi | 5Gi | 💀 Exceeded |
+| `frontend-6c8d` | 45 MiB | — | — | ⚠️ No limit set |
+| `ml-inference-4d2` | 6100 MiB | 4Gi | 8Gi | 74% |
+
+**⚠️ Issues Found:**
+1. `analytics-job-oom` — **OOMKilled**: JVM heap exhausted loading 48GB dataset into 5GB limit
+2. `database-statefulset-0` — At **94% memory** — `shared_buffers` is starved, OOM imminent
+3. `frontend-6c8d` — **No memory limit set** — can OOM-kill neighbours
+
+**Recommendations:**
+```bash
+kubectl set resources deploy/analytics-job --limits=memory=64Gi
+kubectl patch statefulset database-statefulset -p '{"spec":{"template":{"spec":{"containers":[{"name":"postgres","resources":{"limits":{"memory":"2Gi"}}}]}}}}'
+```"""
+
+    elif any(x in msg_lower for x in ['cpu', 'throttl', 'slow', 'latency', 'performance']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_top_pods(namespace=default)` → fetched CPU metrics
+> `k8s_get_pod_resource_limits(*)` → checking throttling
+
+---
+
+**CPU Usage by Pod:**
+
+| Pod | Usage | Request | Limit | Throttled? |
+|---|---|---|---|---|
+| `ml-inference-4d2` | **820m** | 500m | 1000m | ⚠️ **Yes — 64% throttled** |
+| `billing-service-8b7` | 480m | 4000m | 8000m | No (over-provisioned) |
+| `backend-api-9a1` | 210m | 500m | 1000m | No |
+| `frontend-6c8d` | 30m | 500m | — | No (no limit) |
+
+**⚠️ Issues Found:**
+1. `ml-inference` — CPU usage (820m) exceeds request (500m). Being **throttled** causing latency spikes
+2. `billing-service` — Over-provisioned by **88%** (using 480m of 4000m request)
+
+**Fix throttling:**
+```bash
+kubectl set resources deploy/ml-inference --requests=cpu=1100m --limits=cpu=2200m
+```
+
+**Reduce waste:**
+```bash
+kubectl set resources deploy/billing-service --requests=cpu=650m --limits=cpu=1300m
+```"""
+
+    elif any(x in msg_lower for x in ['deploy', 'rollout', 'replica', 'unavailable', 'deployment status']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_deployments(namespace=default)` → 4 deployments found
+> `k8s_get_rollout_status(*)` → checking rollout health
+
+---
+
+**Deployment Status:**
+
+| Deployment | Ready | Up-to-Date | Available | Strategy | Age |
+|---|---|---|---|---|---|
+| `frontend-deployment` | 1/1 | 1 | 1 | RollingUpdate | 3d |
+| `backend-api` | 2/2 | 2 | 2 | RollingUpdate | 5d |
+| `billing-service` | 3/3 | 3 | 3 | RollingUpdate | 7d |
+| `ml-inference` | 1/1 | 1 | 1 | Recreate | 1d |
+
+**All deployments are healthy.** ✅
+
+**Recent Rollout History (billing-service):**
+| Revision | Change | Timestamp |
 |---|---|---|
-| `k8s_list_pods` | All pod statuses | *"Which pods are failing?"* |
-| `k8s_get_pod_logs` | Live log output | *"Why is payment crashing?"* |
-| `k8s_get_pod_events` | K8s events | *"Show events for my-pod"* |
-| `k8s_describe_pod` | Container states | *"Is payment-service healthy?"* |
-| `k8s_list_deployments` | Replica status | *"Any unhealthy deployments?"* |
-| `k8s_get_deployment_status` | Image + Helm version | *"What Helm chart is this?"* |
-| `k8s_list_services` | Ports + types | *"What services are exposed?"* |
-| `k8s_get_configmap` | Config values | *"What's in app-config?"* |
-| `k8s_get_namespace_events` | Cluster events | *"Show warning events"* |
-| `k8s_list_statefulsets` | StatefulSet status | *"Is my DB healthy?"* |
+| 3 (current) | Image → `billing:v1.12.0` | 2h ago |
+| 2 | Image → `billing:v1.11.2` | 3d ago |
+| 1 | Initial deploy | 7d ago |
 
-Just ask naturally — I'll fetch the right data automatically."""
+**Useful commands:**
+```bash
+kubectl rollout status deploy/<name>
+kubectl rollout history deploy/<name>
+kubectl rollout undo deploy/<name>      # Rollback
+```"""
+
+    elif any(x in msg_lower for x in ['pvc', 'storage', 'volume', 'disk', 'persistent']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_pvcs(namespace=default)` → 2 PVCs found
+> `k8s_describe_pvc(*)` → checking storage status
+
+---
+
+**Persistent Volume Claims:**
+
+| PVC | Status | Capacity | StorageClass | Used By |
+|---|---|---|---|---|
+| `postgres-data-0` | ✅ Bound | 50Gi | `standard-rwo` | `database-statefulset-0` |
+| `redis-data-0` | ✅ Bound | 10Gi | `standard-rwo` | `redis-cache-0` |
+
+**Disk Usage (estimated):**
+- `postgres-data-0`: **32Gi / 50Gi** (64%) — healthy
+- `redis-data-0`: **2.1Gi / 10Gi** (21%) — healthy
+
+**⚠️ No PVC issues detected.** Both volumes are bound and accessible.
+
+**Useful commands:**
+```bash
+kubectl get pvc -n <namespace>
+kubectl describe pvc <name>
+kubectl exec <pod> -- df -h /data    # Check actual disk usage
+```"""
+
+    elif any(x in msg_lower for x in ['network', 'dns', 'connect', 'timeout', 'unreachable', 'connection refused']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_services()` → 6 services found
+> `k8s_get_endpoints(*)` → checking endpoint health
+> `k8s_check_network_policies()` → checking restrictions
+
+---
+
+**Service Endpoint Health:**
+
+| Service | Endpoints | Healthy? |
+|---|---|---|
+| `frontend-svc` | 1 pod | ✅ |
+| `backend-api-svc` | 2 pods | ✅ |
+| `payment-svc` | 0 pods | ❌ **No endpoints!** |
+| `database-svc` | 1 pod | ✅ |
+| `cache-svc` | 1 pod | ✅ |
+
+**⚠️ `payment-svc` has no ready endpoints** — the payment-processor pod is in CrashLoopBackOff.
+
+**DNS Resolution Test:**
+```
+database-svc.default.svc.cluster.local → 10.0.1.53 ✅
+payment-svc.default.svc.cluster.local → (no endpoints) ❌
+```
+
+**Common Connectivity Fixes:**
+```bash
+# Verify service selector matches pod labels
+kubectl get endpoints payment-svc
+kubectl describe svc payment-svc
+
+# Test DNS from a pod
+kubectl exec <pod> -- nslookup database-svc
+```"""
+
+    elif any(x in msg_lower for x in ['secret', 'credential', 'password', 'token']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_secrets(namespace=default)` → 4 secrets found
+
+---
+
+**Secrets in Namespace:**
+
+| Secret | Type | Keys | Age |
+|---|---|---|---|
+| `db-credentials` | Opaque | `username`, `password` | 30d |
+| `api-keys` | Opaque | `stripe-key`, `sendgrid-key` | 15d |
+| `tls-cert` | kubernetes.io/tls | `tls.crt`, `tls.key` | 7d |
+| `default-token-*` | SA token | `ca.crt`, `token`, `namespace` | 30d |
+
+**⚠️ Security Notes:**
+- `db-credentials` is mounted in `database-statefulset` — ✅ correct
+- `api-keys` is referenced by `billing-service` via `secretKeyRef` — ✅ correct
+- TLS cert expires in **23 days** — consider auto-rotation
+
+**Useful commands:**
+```bash
+kubectl get secrets -n <namespace>
+kubectl describe secret <name>
+kubectl get secret <name> -o jsonpath='{.data.<key>}' | base64 -d
+```"""
+
+    elif any(x in msg_lower for x in ['rbac', 'permission', 'forbidden', 'access denied', 'unauthorized']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_get_rolebindings(namespace=default)` → checking RBAC
+> `k8s_check_can_i(*)` → testing permissions
+
+---
+
+**RBAC Bindings in Namespace:**
+
+| RoleBinding | Role | Subjects |
+|---|---|---|
+| `admin-binding` | `admin` | Group: `platform-team` |
+| `developer-binding` | `edit` | Group: `dev-team` |
+| `ci-deployer` | `deployer` | SA: `ci-pipeline` |
+
+**Common 403 Fixes:**
+- `RBAC: access denied` in Envoy → Check `AuthorizationPolicy` (Istio mesh)
+- `forbidden: User "X" cannot...` → Check Kubernetes RBAC (RoleBinding)
+
+```bash
+# Check what a service account can do
+kubectl auth can-i --list --as=system:serviceaccount:default:my-sa
+
+# Check if you can scale deployments
+kubectl auth can-i update deployments --namespace=default
+```"""
+
+    elif any(x in msg_lower for x in ['hpa', 'autoscal', 'auto-scal', 'scale automatic']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_hpa(namespace=default)` → 1 HPA found
+
+---
+
+**Horizontal Pod Autoscalers:**
+
+| HPA | Target | Min | Max | Current | Replicas |
+|---|---|---|---|---|---|
+| `backend-api` | CPU: 70% | 2 | 10 | 42% | 2 |
+
+**Status:** HPA is stable — current CPU (42%) is below target (70%), no scaling needed.
+
+**⚠️ Services without HPA:**
+- `billing-service` (3 replicas, fixed) — consider adding HPA
+- `ml-inference` (1 replica) — burst traffic not auto-handled
+
+**Add HPA:**
+```bash
+kubectl autoscale deployment billing-service --cpu-percent=70 --min=2 --max=8
+```"""
+
+    elif any(x in msg_lower for x in ['job', 'cronjob', 'batch', 'scheduled']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_jobs(namespace=default)` → 2 jobs found
+> `k8s_list_cronjobs(namespace=default)` → 1 cronjob found
+
+---
+
+**Jobs:**
+
+| Job | Status | Completions | Duration | Age |
+|---|---|---|---|---|
+| `analytics-job` | ❌ Failed | 0/1 | — | 2h |
+| `db-migration-v12` | ✅ Complete | 1/1 | 45s | 1d |
+
+**CronJobs:**
+
+| CronJob | Schedule | Last Run | Status |
+|---|---|---|---|
+| `log-cleanup` | `0 3 * * *` | 3:00 AM today | ✅ Success |
+
+**⚠️ `analytics-job` failed** — OOMKilled (see memory analysis).
+
+**Useful commands:**
+```bash
+kubectl get jobs
+kubectl describe job analytics-job
+kubectl logs job/analytics-job
+kubectl delete job analytics-job    # Cleanup failed job
+```"""
+
+    elif any(x in msg_lower for x in ['node', 'scheduling', 'unschedulable', 'taint', 'cordon']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_get_nodes()` → 3 nodes found
+
+---
+
+**Node Status:**
+
+| Node | Status | Roles | CPU | Memory | Pods |
+|---|---|---|---|---|---|
+| `worker-1` | ✅ Ready | worker | 4 cores | 16Gi | 4/110 |
+| `worker-2` | ✅ Ready | worker | 4 cores | 16Gi | 3/110 |
+| `worker-3` | ✅ Ready | worker | 8 cores | 32Gi | 2/110 |
+
+**All nodes are schedulable.** ✅
+
+**If pods are Pending (unschedulable):**
+```bash
+kubectl describe pod <pending-pod>    # Check Events section
+kubectl get nodes -o wide
+kubectl describe node <node-name>     # Check Allocatable vs Allocated
+kubectl top nodes                     # Check actual usage
+```"""
+
+    elif any(x in msg_lower for x in ['namespace', 'overview', 'summary', 'health check', 'cluster status']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_namespace_summary(default)` → aggregating...
+
+---
+
+**📊 Namespace Summary: `default`**
+
+| Category | Count | Healthy | Issues |
+|---|---|---|---|
+| **Pods** | 9 | 7 | 2 (CrashLoop, OOMKilled) |
+| **Deployments** | 4 | 4/4 ready | — |
+| **StatefulSets** | 1 | 1/1 ready | memory pressure |
+| **DaemonSets** | 1 | 3/3 ready | over-provisioned |
+| **Services** | 6 | 5 with endpoints | 1 no endpoints |
+| **ConfigMaps** | 3 | — | — |
+| **Secrets** | 4 | — | TLS expiring in 23d |
+| **PVCs** | 2 | 2 Bound | — |
+| **Jobs** | 2 | 1 Complete | 1 Failed |
+
+**🔴 Critical Issues:**
+1. `payment-processor-0` — CrashLoopBackOff (DB unreachable)
+2. `analytics-job-oom` — OOMKilled (memory limit too low)
+
+**🟡 Warnings:**
+3. `database-statefulset-0` — Memory at 94% of limit
+4. `frontend` — No memory limits set
+5. `billing-service` — CPU over-provisioned by 88%"""
+
+    elif any(x in msg_lower for x in ['restart', 'crashloop', 'back-off', 'backoff', 'keeps restarting']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_list_pods(field_selector=status.phase!=Running)` → 2 unhealthy
+> `k8s_get_pod_restart_counts()` → checking restart history
+
+---
+
+**Pods with Restart Issues:**
+
+| Pod | Restarts | Status | Last Exit | Reason |
+|---|---|---|---|---|
+| `payment-processor-0` | **8** | CrashLoopBackOff | 3m ago | Error (exit 1) |
+| `analytics-job-oom` | **3** | OOMKilled | 1h ago | OOMKilled (exit 137) |
+
+**Root Cause — `payment-processor-0`:**
+```
+[FATAL] ConnectionRefused: cannot reach postgres at 10.0.0.5:5432
+[FATAL] panic: nil pointer dereference in main.connectDB
+```
+→ Database pod is healthy but the connection string may be wrong.
+
+**Fix:**
+```bash
+kubectl describe pod payment-processor-0   # Check DB_HOST env var
+kubectl rollout restart statefulset/database-statefulset
+kubectl logs payment-processor-0 --previous   # See crash logs
+```"""
+
+    elif any(x in msg_lower for x in ['image', 'pull', 'imagepull', 'registry', 'tag']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_get_pod_images(namespace=default)` → scanning images
+
+---
+
+**Container Images in Namespace:**
+
+| Pod | Container | Image | Status |
+|---|---|---|---|
+| `frontend-6c8d` | main | `frontend:v2.4.1` | ✅ Running |
+| `backend-api-9a1` | main | `backend-api:v3.1.2` | ✅ Running |
+| `billing-service-8b7` | main | `billing:v1.12.0` | ✅ Running |
+| `ml-inference-4d2` | main | `ml-inference:v0.9.5-beta` | ✅ Running |
+| `payment-processor-0` | processor | `payment:v1.8.3` | ❌ CrashLoop |
+
+**⚠️ No ImagePullBackOff issues detected.**
+
+**If you see ImagePullBackOff:**
+```bash
+kubectl describe pod <pod-name>    # Check Events for pull error
+# Common fixes:
+# 1. Wrong image name/tag → fix in deployment spec
+# 2. Private registry → add imagePullSecrets
+# 3. Image doesn't exist → verify in container registry
+```"""
+
+    elif any(x in msg_lower for x in ['best practice', 'recommend', 'improve', 'optimize', 'suggestion']):
+        reply = """🔍 **Analysing namespace against K8s best practices...**
+
+---
+
+**🏆 Best Practice Assessment:**
+
+| Check | Status | Detail |
+|---|---|---|
+| Resource requests set | ⚠️ | `frontend` missing requests |
+| Resource limits set | ❌ | `frontend` has no memory limit |
+| Liveness probes | ⚠️ | 2 deployments missing probes |
+| Readiness probes | ⚠️ | 2 deployments missing probes |
+| Pod Disruption Budgets | ❌ | None configured |
+| HPA configured | ⚠️ | Only 1 of 4 deployments |
+| Anti-affinity rules | ❌ | Not set (single-AZ risk) |
+| Image tags pinned | ✅ | All using versioned tags |
+| Network policies | ⚠️ | No NetworkPolicy resources |
+| Security context | ❌ | `database` runs as root |
+
+**Top 3 Recommendations:**
+1. **Add memory limits** to `frontend` — prevents OOM-killing neighbours
+2. **Add liveness/readiness probes** — enables self-healing
+3. **Add PodDisruptionBudget** — protects availability during node drains
+
+Would you like me to generate the YAML for any of these?"""
+
+    elif any(x in msg_lower for x in ['log', 'logs', 'stderr', 'stdout', 'error log']):
+        reply = """🔍 **Calling live K8s tools...**
+
+> `k8s_get_pod_logs(payment-processor-0, tail=50)` → fetched logs
+
+---
+
+**Recent Logs — `payment-processor-0` (last 10 lines):**
+
+```
+2026-04-28T10:45:01Z [INFO]  Starting payment-processor v1.8.3
+2026-04-28T10:45:02Z [INFO]  Initialising database connection pool...
+2026-04-28T10:45:02Z [WARN]  DB connection attempt 1/3 failed
+2026-04-28T10:45:05Z [WARN]  DB connection attempt 2/3 failed
+2026-04-28T10:45:08Z [WARN]  DB connection attempt 3/3 failed
+2026-04-28T10:45:08Z [FATAL] ConnectionRefused: cannot reach postgres at 10.0.0.5:5432
+2026-04-28T10:45:08Z [FATAL] panic: runtime error: nil pointer dereference
+2026-04-28T10:45:08Z [FATAL]   goroutine 1 [running]:
+2026-04-28T10:45:08Z [FATAL]   main.connectDB(0x0, 0x0)
+2026-04-28T10:45:08Z [FATAL] Process exiting with code 1
+```
+
+**Analysis:** The app retries DB connection 3 times then panics due to nil pointer on the failed connection handle.
+
+**Useful log commands:**
+```bash
+kubectl logs <pod> --tail=100           # Last 100 lines
+kubectl logs <pod> --previous           # Logs from crashed container
+kubectl logs <pod> -c istio-proxy       # Sidecar proxy logs
+kubectl logs <pod> --since=1h           # Last hour only
+```"""
+
+    elif any(x in msg_lower for x in ['help', 'what can', 'capabilit']):
+        reply = """I'm your **GDC Cluster Agent** — powered by AI with **live Kubernetes API access**.
+
+I can help with these topics:
+
+| Category | Example Questions |
+|---|---|
+| 🔴 **Troubleshooting** | *"Why is payment crashing?"*, *"Show crash loops"* |
+| 📋 **Logs** | *"Show logs for payment-processor"*, *"Any errors in logs?"* |
+| 💾 **Memory/OOM** | *"Which pods use most memory?"*, *"Why was my pod OOMKilled?"* |
+| ⚡ **CPU/Throttling** | *"Is anything being CPU throttled?"*, *"Show CPU usage"* |
+| 🚀 **Deployments** | *"Show deployment status"*, *"Rollout history"* |
+| 🌐 **Networking** | *"Any DNS issues?"*, *"Which services have no endpoints?"* |
+| 💽 **Storage** | *"Show PVC status"*, *"Any disk pressure?"* |
+| 🔐 **Secrets** | *"List secrets"*, *"When does TLS cert expire?"* |
+| 🛡️ **RBAC** | *"Why am I getting 403?"*, *"Check permissions"* |
+| 📈 **Autoscaling** | *"Is HPA configured?"*, *"Add autoscaling"* |
+| ⏱️ **Jobs** | *"Show failed jobs"*, *"CronJob status"* |
+| 🖥️ **Nodes** | *"Node status"*, *"Why is my pod Pending?"* |
+| 📊 **Overview** | *"Namespace summary"*, *"Cluster health check"* |
+| 🏆 **Best Practices** | *"Any recommendations?"*, *"What should I improve?"* |
+| 🐳 **Images** | *"What image versions?"*, *"ImagePullBackOff help"* |
+| ⚙️ **Config** | *"Show ConfigMap"*, *"What's in app-config?"* |
+| 📅 **Events** | *"Show warning events"*, *"What happened recently?"* |
+| 🎛️ **Services** | *"What services exist?"*, *"Show exposed ports"* |
+| 🔖 **Helm** | *"What Helm chart?"*, *"Show image versions"* |
+
+Just ask naturally — I understand context and follow-up questions!"""
 
     else:
         if turn == 1:
@@ -1864,17 +2581,43 @@ Based on the live cluster data, my recommendation is to first stabilise `payment
     suggested = []
     r = reply.lower()
     if 'crash' in r or 'oomkill' in r or 'backoff' in r:
-        suggested = ['Check database-statefulset health', 'Show me the raw logs', 'What are the recent events?']
+        suggested = ['Show memory usage by pod', 'Check database-statefulset health', 'Show me the raw logs']
+    elif 'memory' in r or 'ram' in r:
+        suggested = ['Show CPU usage too', 'Any best practice recommendations?', 'Namespace overview']
+    elif 'cpu' in r or 'throttl' in r:
+        suggested = ['Show memory usage', 'Any pods over-provisioned?', 'Is HPA configured?']
+    elif 'deploy' in r or 'rollout' in r:
+        suggested = ['Show pod status', 'Any warning events?', 'Check image versions']
+    elif 'pvc' in r or 'storage' in r:
+        suggested = ['Show node status', 'Namespace summary', 'Any pods failing?']
+    elif 'network' in r or 'dns' in r or 'endpoint' in r:
+        suggested = ['Show services and ports', 'Any RBAC denials?', 'Check pod connectivity']
+    elif 'secret' in r or 'credential' in r:
+        suggested = ['Show ConfigMap values', 'Any RBAC issues?', 'Best practice check']
+    elif 'rbac' in r or 'permission' in r:
+        suggested = ['Show namespace summary', 'Any 403 in proxy logs?', 'List services']
+    elif 'hpa' in r or 'autoscal' in r:
+        suggested = ['Show CPU usage', 'Show memory usage', 'Deployment status']
+    elif 'job' in r or 'cronjob' in r:
+        suggested = ['Show logs for failed job', 'Memory usage by pod', 'Events for analytics-job']
+    elif 'node' in r or 'schedul' in r:
+        suggested = ['Namespace summary', 'Any pending pods?', 'Show resource usage']
+    elif 'best practice' in r or 'recommend' in r:
+        suggested = ['Show memory usage', 'Show CPU usage', 'Generate YAML for probes']
+    elif 'image' in r or 'pull' in r:
+        suggested = ['Show deployment status', 'Any warning events?', 'Helm chart versions']
     elif 'helm' in r or 'version' in r or 'image' in r:
         suggested = ['What version is frontend running?', 'List all deployments', 'Which pods are unhealthy?']
     elif 'event' in r or 'warning' in r:
-        suggested = ['Show logs for payment-processor-0', 'Run diagnose on payment-processor-0', 'List all pods']
+        suggested = ['Show logs for payment-processor-0', 'Run diagnose on payment-processor-0', 'Namespace overview']
     elif 'service' in r or 'port' in r:
-        suggested = ['What pods are running?', 'List deployments', 'Show recent events']
+        suggested = ['Any network connectivity issues?', 'Show pod status', 'Check DNS resolution']
     elif 'help' in r or 'capable' in r:
-        suggested = ['Why is payment crashing?', 'What Helm chart is payment-service?', 'Show warning events']
+        suggested = ['Namespace summary', 'Show memory usage', 'Why is payment crashing?']
+    elif 'log' in r:
+        suggested = ['Why is this pod crashing?', 'Show warning events', 'Memory usage by pod']
     else:
-        suggested = ['Show all pods and status', 'Any warning events?', 'What image versions are running?']
+        suggested = ['Namespace summary', 'Show memory usage', 'Any warning events?']
 
     return jsonify({
         'reply': reply,
@@ -2786,7 +3529,7 @@ def mock_self_heal():
     }
 
     diag = diagnoses.get(status, {
-        'root_cause': 'Gemini identified an unexpected container failure. Recommend checking recent config changes and pod events.',
+        'root_cause': 'AI identified an unexpected container failure. Recommend checking recent config changes and pod events.',
         'confidence': 65,
         'error_type': status,
         'action': 'restart',
