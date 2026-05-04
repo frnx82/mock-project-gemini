@@ -6900,6 +6900,9 @@
         // and auto-reloads or shows a re-authenticate banner.
 
         let _authFailed = false;
+        // Save the REAL native fetch before we override it.
+        // Must be declared here (before _checkAuth / ping) so they can use it.
+        var _origFetchRaw = window.fetch.bind(window);
 
         function _showAuthBanner() {
             if (document.getElementById('auth-expiry-banner')) return;
@@ -6922,8 +6925,14 @@
 
         async function _checkAuth() {
             try {
-                const res = await fetch('/api/auth/status');
-                // CIDP redirected to login page (fetch follows 302, returns HTML)
+                // Use redirect:'manual' to prevent fetch from chasing the 302 to CIDP
+                // (which fails due to CORS). Instead we detect the redirect ourselves.
+                const res = await _origFetchRaw('/api/auth/status', { redirect: 'manual' });
+                // Status 0 + type 'opaqueredirect' = server sent a 302 to a different origin
+                if (res.type === 'opaqueredirect' || res.status === 0) {
+                    console.warn('[auth] CIDP redirect detected (opaque) — session expired');
+                    return false;
+                }
                 if (res.redirected) {
                     console.warn('[auth] CIDP redirected — session expired');
                     return false;
@@ -6939,8 +6948,13 @@
                 }
                 return true;
             } catch (e) {
+                // CORS failure = fetch chased a redirect to CIDP and got blocked
+                if (e.message && (e.message.includes('Failed to fetch') || e.message.includes('CORS') || e.message.includes('NetworkError'))) {
+                    console.warn('[auth] CORS/network error during auth check — session expired');
+                    return false;
+                }
                 console.warn('[auth] Auth check failed:', e.message);
-                return false;  // network error — assume expired
+                return false;
             }
         }
 
@@ -6987,7 +7001,7 @@
             if (idleMs < _IDLE_TIMEOUT) {
                 // User is ACTIVE — ping to keep CIDP session alive
                 try {
-                    await fetch('/api/ping');
+                    await _origFetchRaw('/api/ping', { redirect: 'manual' });
                 } catch (e) {
                     // Network error — ignore, will be caught by auth check
                 }
@@ -7008,29 +7022,60 @@
             }
         }, _PING_INTERVAL);
 
-        // 3. Fetch retry wrapper: handles 5xx retries + CIDP auth detection
+        // 3. Fetch retry wrapper: handles 5xx retries + CIDP auth redirect detection
+        //    KEY FIX: Uses redirect:'manual' for /api/ calls to prevent fetch() from
+        //    chasing 302 redirects to CIDP (which fails due to CORS). Instead, we
+        //    detect the opaque redirect and show the re-authenticate banner.
+        //
         //    In offline/demo mode (file:// protocol), the mock_data.js interceptor
         //    handles all /api/ calls — no retries needed.
+        // _origFetchRaw already saved above (before _checkAuth)
+        // Now override window.fetch to intercept /api/ calls:
         if (window.location.protocol !== 'file:') {
-            const _origFetch2 = window.fetch;
             window.fetch = async function (url, opts) {
+                const isApi = typeof url === 'string' && url.startsWith('/api/');
                 const delays = [1500, 3000, 6000];
+
+                // For API calls, inject redirect:'manual' to catch CIDP 302s BEFORE
+                // the browser chases them into a CORS wall.
+                const fetchOpts = (isApi && !(opts && opts.redirect))
+                    ? { ...opts, redirect: 'manual' }
+                    : opts;
+
                 for (let attempt = 0; attempt <= delays.length; attempt++) {
                     try {
-                        const res = await _origFetch2(url, opts);
-                        if (typeof url === 'string' && url.startsWith('/api/')) {
+                        const res = await _origFetchRaw(url, fetchOpts);
+
+                        if (isApi) {
+                            // Opaque redirect: server sent 302 to CIDP (cross-origin)
+                            // With redirect:'manual', the browser returns type='opaqueredirect', status=0
+                            if (res.type === 'opaqueredirect' || res.status === 0) {
+                                console.warn(`[auth] API ${url} → CIDP redirect detected (opaque). Session expired.`);
+                                _showAuthBanner();
+                                // Return a synthetic 401 response so callers get a clean error
+                                return new Response(JSON.stringify({ error: 'session_expired' }), {
+                                    status: 401,
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                            }
+                            // Explicit auth failures
                             if (res.redirected || res.status === 401 || res.status === 403) {
                                 console.warn(`[auth] API ${url} returned auth failure (${res.status}, redirected=${res.redirected})`);
                                 _showAuthBanner();
                                 return res;
                             }
+                            // Server returned HTML instead of JSON (CIDP login page leaked through)
                             const ct = res.headers.get('content-type') || '';
                             if (ct.includes('text/html') && !url.includes('/api/ping')) {
                                 console.warn(`[auth] API ${url} returned HTML — likely CIDP login page`);
                                 _showAuthBanner();
-                                return res;
+                                return new Response(JSON.stringify({ error: 'session_expired' }), {
+                                    status: 401,
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
                             }
                         }
+                        // 5xx server errors — retry with backoff
                         if (res.status >= 500 && attempt < delays.length) {
                             console.warn(`[recovery] Server error ${res.status} for ${url} — retrying in ${delays[attempt]}ms`);
                             await new Promise(r => setTimeout(r, delays[attempt]));
@@ -7038,6 +7083,17 @@
                         }
                         return res;
                     } catch (err) {
+                        // CORS failure: fetch chased a redirect to CIDP and got blocked
+                        // This is the EXACT error the user was seeing.
+                        if (isApi && err.message && (err.message.includes('Failed to fetch') || err.message.includes('CORS') || err.message.includes('NetworkError'))) {
+                            console.warn(`[auth] CORS/network failure for ${url} — session likely expired. Showing auth banner.`);
+                            _showAuthBanner();
+                            return new Response(JSON.stringify({ error: 'session_expired' }), {
+                                status: 401,
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                        }
+                        // Other network errors — retry with backoff
                         if (attempt < delays.length) {
                             console.warn(`[recovery] Fetch failed for ${url} — retrying in ${delays[attempt]}ms`);
                             await new Promise(r => setTimeout(r, delays[attempt]));
