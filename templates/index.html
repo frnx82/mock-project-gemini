@@ -4791,6 +4791,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query, namespace: ns })
                 });
+                // Guard: ensure response is JSON before parsing
+                const contentType = resp.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const textBody = await resp.text();
+                    throw new Error('Server returned non-JSON: ' + textBody.substring(0, 100));
+                }
                 const data = await resp.json();
                 _setAILoading(false);
 

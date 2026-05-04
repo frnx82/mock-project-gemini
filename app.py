@@ -2418,11 +2418,18 @@ Return ONLY the JSON object. No markdown. No code fences. No explanation.
         return jsonify({
             'action': 'chat',
             'message': "I understood your request but couldn't parse the intent. Try rephrasing.",
+            'reply': "I understood your request but couldn't parse the intent. Try rephrasing.",
             'target': '', 'criteria': {}, 'count': None
         })
     except Exception as e:
         print(f"[ai_query] Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        # Always return valid JSON with a chat action so the frontend doesn't crash
+        return jsonify({
+            'action': 'chat',
+            'target': '', 'criteria': {}, 'count': None,
+            'message': f'⚠️ AI query failed: {str(e)[:200]}',
+            'reply': f'⚠️ **AI query encountered an error:**\n\n`{str(e)[:200]}`\n\nThis usually means the Kubernetes API or AI engine is unreachable. Check `/api/ai/status` for details.'
+        })
 
 
 @app.route('/api/ai/summarize_logs', methods=['POST'])
@@ -3070,7 +3077,13 @@ def _fetch_resource_logs(namespace: str, message: str) -> str:
 # GEMINI FUNCTION CALLING — K8S TOOLS FOR AI CHAT AGENT
 # ═══════════════════════════════════════════════════════════════════════════
 
-from google.genai import types as _genai_types
+try:
+    from google.genai import types as _genai_types
+except ImportError:
+    # google-genai not installed — create a stub so the app starts without crashing.
+    # AI Chat (function calling) will be unavailable, but everything else works.
+    print("[AI] ⚠️  google.genai.types not available — AI Chat (function calling) disabled.")
+    _genai_types = None
 
 # ── 10 K8s Tool Functions ──────────────────────────────────────────────────
 
@@ -3554,168 +3567,369 @@ def _k8s_namespace_summary(namespace: str) -> str:
         return f'Error generating namespace summary: {e}'
 
 
+# ── ACTION Tool Functions (scale, restart, delete) ─────────────────────────
+
+def _k8s_scale_deployment(namespace: str, deployment_name: str, replicas: int) -> str:
+    """Scale a deployment or statefulset to the specified number of replicas."""
+    try:
+        apps_v1 = client.AppsV1Api()
+        # Try deployment first
+        try:
+            apps_v1.patch_namespaced_deployment_scale(
+                deployment_name, namespace,
+                body={'spec': {'replicas': int(replicas)}}
+            )
+            return f'✅ Successfully scaled Deployment "{deployment_name}" to {replicas} replicas in namespace "{namespace}".'
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                # Try StatefulSet
+                apps_v1.patch_namespaced_stateful_set_scale(
+                    deployment_name, namespace,
+                    body={'spec': {'replicas': int(replicas)}}
+                )
+                return f'✅ Successfully scaled StatefulSet "{deployment_name}" to {replicas} replicas in namespace "{namespace}".'
+            raise
+    except Exception as e:
+        return f'❌ Failed to scale "{deployment_name}": {e}'
+
+
+def _k8s_restart_deployment(namespace: str, deployment_name: str) -> str:
+    """Trigger a rolling restart of a deployment."""
+    try:
+        apps_v1 = client.AppsV1Api()
+        import datetime
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        body = {
+            'spec': {
+                'template': {
+                    'metadata': {
+                        'annotations': {
+                            'kubectl.kubernetes.io/restartedAt': now
+                        }
+                    }
+                }
+            }
+        }
+        apps_v1.patch_namespaced_deployment(deployment_name, namespace, body=body)
+        return f'♻️ Rolling restart triggered for Deployment "{deployment_name}". New pods will be ready in ~30s.'
+    except Exception as e:
+        return f'❌ Failed to restart "{deployment_name}": {e}'
+
+
+def _k8s_delete_pod(namespace: str, pod_name: str) -> str:
+    """Delete a specific pod (useful for forcing a restart of a single pod)."""
+    try:
+        v1 = client.CoreV1Api()
+        v1.delete_namespaced_pod(pod_name, namespace)
+        return f'🗑️ Pod "{pod_name}" deleted. If managed by a controller, a replacement will be created automatically.'
+    except Exception as e:
+        return f'❌ Failed to delete pod "{pod_name}": {e}'
+
+
+def _k8s_rollback_deployment(namespace: str, deployment_name: str, revision: int = 0) -> str:
+    """Rollback a deployment to a previous revision (0 = previous)."""
+    try:
+        apps_v1 = client.AppsV1Api()
+        # Get current revision for reporting
+        dep = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+        current_rev = dep.metadata.annotations.get('deployment.kubernetes.io/revision', '?')
+
+        if revision == 0:
+            # Rollback to previous — patch with rolling update annotation
+            # The K8s API rollback is done by patching the deployment's spec
+            # to match a previous ReplicaSet's template
+            rs_list = apps_v1.list_namespaced_replica_set(
+                namespace, label_selector=','.join(f'{k}={v}' for k, v in (dep.spec.selector.match_labels or {}).items()))
+            rs_sorted = sorted(rs_list.items, key=lambda r: int(r.metadata.annotations.get('deployment.kubernetes.io/revision', '0')), reverse=True)
+            if len(rs_sorted) < 2:
+                return f'⚠️ No previous revision found for "{deployment_name}". Only 1 ReplicaSet exists.'
+            prev_rs = rs_sorted[1]
+            prev_rev = prev_rs.metadata.annotations.get('deployment.kubernetes.io/revision', '?')
+            prev_image = prev_rs.spec.template.spec.containers[0].image if prev_rs.spec.template.spec.containers else '?'
+            # Patch deployment with previous template
+            body = {'spec': {'template': prev_rs.spec.template}}
+            apps_v1.patch_namespaced_deployment(deployment_name, namespace, body=body)
+            return (f'⏪ Rolled back Deployment "{deployment_name}" from revision {current_rev} to {prev_rev}.\n'
+                    f'Previous image: `{prev_image}`\n'
+                    f'New pods will roll out in ~30s.')
+        else:
+            # Rollback to specific revision
+            rs_list = apps_v1.list_namespaced_replica_set(
+                namespace, label_selector=','.join(f'{k}={v}' for k, v in (dep.spec.selector.match_labels or {}).items()))
+            target_rs = None
+            for rs in rs_list.items:
+                if rs.metadata.annotations.get('deployment.kubernetes.io/revision') == str(revision):
+                    target_rs = rs
+                    break
+            if not target_rs:
+                avail = [rs.metadata.annotations.get('deployment.kubernetes.io/revision', '?') for rs in rs_list.items]
+                return f'❌ Revision {revision} not found for "{deployment_name}". Available: {avail}'
+            body = {'spec': {'template': target_rs.spec.template}}
+            apps_v1.patch_namespaced_deployment(deployment_name, namespace, body=body)
+            target_image = target_rs.spec.template.spec.containers[0].image if target_rs.spec.template.spec.containers else '?'
+            return (f'⏪ Rolled back "{deployment_name}" to revision {revision}.\n'
+                    f'Image: `{target_image}`\n'
+                    f'New pods rolling out in ~30s.')
+    except Exception as e:
+        return f'❌ Failed to rollback "{deployment_name}": {e}'
+
+
+def _k8s_exec_command(namespace: str, pod_name: str, command: str, container: str = '') -> str:
+    """Execute a command inside a running pod and return the output."""
+    try:
+        from kubernetes.stream import stream
+        v1 = client.CoreV1Api()
+
+        # Safety: block dangerous commands
+        cmd_lower = command.lower().strip()
+        blocked = ['rm -rf /', 'mkfs', 'dd if=', ':(){', 'fork bomb', 'shutdown', 'reboot', 'halt',
+                   'init 0', 'init 6', 'kill -9 1', 'chmod -R 777 /']
+        for b in blocked:
+            if b in cmd_lower:
+                return f'🚫 Command blocked for safety: `{command}` matches dangerous pattern "{b}"'
+
+        # Parse command into list
+        exec_command = ['/bin/sh', '-c', command]
+
+        kwargs = {
+            'name': pod_name,
+            'namespace': namespace,
+            'command': exec_command,
+            'stderr': True, 'stdin': False, 'stdout': True, 'tty': False,
+            '_request_timeout': 30
+        }
+        if container:
+            kwargs['container'] = container
+
+        result = stream(v1.connect_get_namespaced_pod_exec, **kwargs)
+
+        # Truncate long output
+        if len(result) > 3000:
+            result = result[:3000] + f'\n\n... (truncated, {len(result)} total chars)'
+
+        return f'📟 **`{command}`** on `{pod_name}`:\n```\n{result}\n```'
+    except Exception as e:
+        err_str = str(e)
+        if 'not found' in err_str.lower():
+            return f'❌ Pod "{pod_name}" not found in namespace "{namespace}".'
+        if 'container not found' in err_str.lower():
+            return f'❌ Container "{container}" not found in pod "{pod_name}". Check container names.'
+        return f'❌ Exec failed on "{pod_name}": {e}'
+
+
 # ── Gemini Tool Declarations ───────────────────────────────────────────────
 
-_STR = _genai_types.Schema(type='STRING')
-_INT = _genai_types.Schema(type='INTEGER')
+if _genai_types:
+    _STR = _genai_types.Schema(type='STRING')
+    _INT = _genai_types.Schema(type='INTEGER')
 
-def _schema(props: dict, required: list = None) -> _genai_types.Schema:
-    return _genai_types.Schema(
-        type='OBJECT',
-        properties={k: _genai_types.Schema(type=v[0], description=v[1]) for k, v in props.items()},
-        required=required or list(props.keys())[:1]
-    )
+    def _schema(props: dict, required: list = None) -> _genai_types.Schema:
+        return _genai_types.Schema(
+            type='OBJECT',
+            properties={k: _genai_types.Schema(type=v[0], description=v[1]) for k, v in props.items()},
+            required=required or list(props.keys())[:1]
+        )
 
-K8S_TOOLS = _genai_types.Tool(function_declarations=[
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_pods',
-        description='List all pods in the namespace with phase, readiness, restart counts, and node assignment.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'label_selector': ('STRING', 'Optional label selector e.g. app=my-service')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_get_pod_logs',
-        description='Fetch recent log output from a pod. Use to diagnose crashes, errors, or startup failures.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'pod_name': ('STRING', 'Full pod name'),
-                             'container': ('STRING', 'Container name — leave empty to use default container'),
-                             'tail_lines': ('INTEGER', 'Number of recent log lines to fetch, default 150')},
-                            required=['namespace', 'pod_name'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_get_pod_events',
-        description='Fetch Kubernetes events for a specific pod — OOMKills, scheduling failures, restarts.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'pod_name': ('STRING', 'Pod name')},
-                            required=['namespace', 'pod_name'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_describe_pod',
-        description='Get detailed pod spec — container states, restart count, conditions, node, IP.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'pod_name': ('STRING', 'Pod name')},
-                            required=['namespace', 'pod_name'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_deployments',
-        description='List all deployments with desired/ready/available replica counts and container images.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_get_deployment_status',
-        description='Get detailed status of a single deployment including resource requests/limits and conditions.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'deployment_name': ('STRING', 'Deployment name')},
-                            required=['namespace', 'deployment_name'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_services',
-        description='List all services in the namespace with their type, ClusterIP, and port mappings.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_get_configmap',
-        description='Fetch the key-value contents of a ConfigMap.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'configmap_name': ('STRING', 'ConfigMap name')},
-                            required=['namespace', 'configmap_name'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_get_namespace_events',
-        description='Fetch recent Kubernetes events across the entire namespace. Use for cluster-wide issues.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'event_type': ('STRING', 'Optional filter: Warning or Normal')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_statefulsets',
-        description='List StatefulSets with desired/ready/current replica counts.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    # ── NEW: 9 additional tools matching mock_app coverage ─────────────────
-    _genai_types.FunctionDeclaration(
-        name='k8s_top_pods',
-        description='Get real-time CPU and memory usage for all pods using metrics-server. Use for memory/OOM and CPU/throttling questions.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_pvcs',
-        description='List PersistentVolumeClaims with status (Bound/Pending), capacity, access modes, and storage class.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_secrets',
-        description='List secrets with type and key names (never exposes actual secret values). Use for credential/TLS troubleshooting.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_rolebindings',
-        description='List RoleBindings and ClusterRoleBindings in the namespace. Use to diagnose RBAC permission issues (403 Forbidden, access denied).',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_hpa',
-        description='List Horizontal Pod Autoscalers with min/max replicas, current/desired counts, and scaling targets.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_jobs',
-        description='List Jobs (with completions, succeeded, failed counts) and CronJobs (with schedule, last run, suspended status).',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_list_nodes',
-        description='List all cluster nodes with Ready/NotReady status, roles, CPU/memory capacity, and conditions (MemoryPressure, DiskPressure).',
-        parameters=_schema({})
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_check_endpoints',
-        description='Check service endpoints to diagnose networking and DNS issues. Shows ready/not-ready addresses per service.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
-                             'service_name': ('STRING', 'Optional service name to check specific endpoints')},
-                            required=['namespace'])
-    ),
-    _genai_types.FunctionDeclaration(
-        name='k8s_namespace_summary',
-        description='Get a comprehensive namespace health overview: pod counts by phase, deployment health, service count, resource quotas, and warning event count.',
-        parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
-                            required=['namespace'])
-    ),
-])
+    K8S_TOOLS = _genai_types.Tool(function_declarations=[
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_pods',
+            description='List all pods in the namespace with phase, readiness, restart counts, and node assignment.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'label_selector': ('STRING', 'Optional label selector e.g. app=my-service')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_get_pod_logs',
+            description='Fetch recent log output from a pod. Use to diagnose crashes, errors, or startup failures.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'pod_name': ('STRING', 'Full pod name'),
+                                 'container': ('STRING', 'Container name — leave empty to use default container'),
+                                 'tail_lines': ('INTEGER', 'Number of recent log lines to fetch, default 150')},
+                                required=['namespace', 'pod_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_get_pod_events',
+            description='Fetch Kubernetes events for a specific pod — OOMKills, scheduling failures, restarts.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'pod_name': ('STRING', 'Pod name')},
+                                required=['namespace', 'pod_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_describe_pod',
+            description='Get detailed pod spec — container states, restart count, conditions, node, IP.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'pod_name': ('STRING', 'Pod name')},
+                                required=['namespace', 'pod_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_deployments',
+            description='List all deployments with desired/ready/available replica counts and container images.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_get_deployment_status',
+            description='Get detailed status of a single deployment including resource requests/limits and conditions.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'deployment_name': ('STRING', 'Deployment name')},
+                                required=['namespace', 'deployment_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_services',
+            description='List all services in the namespace with their type, ClusterIP, and port mappings.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_get_configmap',
+            description='Fetch the key-value contents of a ConfigMap.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'configmap_name': ('STRING', 'ConfigMap name')},
+                                required=['namespace', 'configmap_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_get_namespace_events',
+            description='Fetch recent Kubernetes events across the entire namespace. Use for cluster-wide issues.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'event_type': ('STRING', 'Optional filter: Warning or Normal')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_statefulsets',
+            description='List StatefulSets with desired/ready/current replica counts.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        # ── NEW: 9 additional tools matching mock_app coverage ─────────────────
+        _genai_types.FunctionDeclaration(
+            name='k8s_top_pods',
+            description='Get real-time CPU and memory usage for all pods using metrics-server. Use for memory/OOM and CPU/throttling questions.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_pvcs',
+            description='List PersistentVolumeClaims with status (Bound/Pending), capacity, access modes, and storage class.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_secrets',
+            description='List secrets with type and key names (never exposes actual secret values). Use for credential/TLS troubleshooting.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_rolebindings',
+            description='List RoleBindings and ClusterRoleBindings in the namespace. Use to diagnose RBAC permission issues (403 Forbidden, access denied).',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_hpa',
+            description='List Horizontal Pod Autoscalers with min/max replicas, current/desired counts, and scaling targets.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_jobs',
+            description='List Jobs (with completions, succeeded, failed counts) and CronJobs (with schedule, last run, suspended status).',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_nodes',
+            description='List all cluster nodes with Ready/NotReady status, roles, CPU/memory capacity, and conditions (MemoryPressure, DiskPressure).',
+            parameters=_schema({})
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_check_endpoints',
+            description='Check service endpoints to diagnose networking and DNS issues. Shows ready/not-ready addresses per service.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'service_name': ('STRING', 'Optional service name to check specific endpoints')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_namespace_summary',
+            description='Get a comprehensive namespace health overview: pod counts by phase, deployment health, service count, resource quotas, and warning event count.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        # ── ACTION tools (write operations) ────────────────────────────────
+        _genai_types.FunctionDeclaration(
+            name='k8s_scale_deployment',
+            description='Scale a Deployment or StatefulSet to a specific number of replicas. Use when the user asks to scale up, scale down, or set replicas.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'deployment_name': ('STRING', 'Name of the Deployment or StatefulSet to scale'),
+                                 'replicas': ('INTEGER', 'Target number of replicas')},
+                                required=['namespace', 'deployment_name', 'replicas'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_restart_deployment',
+            description='Trigger a rolling restart of a Deployment. Use when the user asks to restart, bounce, or recycle a deployment.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'deployment_name': ('STRING', 'Name of the Deployment to restart')},
+                                required=['namespace', 'deployment_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_delete_pod',
+            description='Delete a specific pod. Useful for forcing a restart of a single pod managed by a controller.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'pod_name': ('STRING', 'Full name of the pod to delete')},
+                                required=['namespace', 'pod_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_rollback_deployment',
+            description='Rollback a Deployment to a previous revision. Undoes the last deploy. Use when a user says rollback, undo, revert, or go back to previous version. Set revision=0 for the previous revision.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'deployment_name': ('STRING', 'Name of the Deployment to rollback'),
+                                 'revision': ('INTEGER', 'Target revision number. 0 = previous revision (most common)')},
+                                required=['namespace', 'deployment_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_exec_command',
+            description='Execute a shell command inside a running pod and return the output. Use for debugging: checking files, testing connectivity (curl, wget, nslookup), checking processes (ps), disk usage (df), env vars (env), etc. Dangerous commands are blocked.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'pod_name': ('STRING', 'Full pod name to exec into'),
+                                 'command': ('STRING', 'Shell command to execute, e.g. curl localhost:8080/health, ls /app, env, ps aux'),
+                                 'container': ('STRING', 'Optional container name for multi-container pods')},
+                                required=['namespace', 'pod_name', 'command'])
+        ),
+    ])
 
-# Dispatcher: maps function name → Python function call
-_K8S_TOOL_MAP = {
-    'k8s_list_pods':             lambda a: _k8s_list_pods(**a),
-    'k8s_get_pod_logs':          lambda a: _k8s_get_pod_logs(**a),
-    'k8s_get_pod_events':        lambda a: _k8s_get_pod_events(**a),
-    'k8s_describe_pod':          lambda a: _k8s_describe_pod(**a),
-    'k8s_list_deployments':      lambda a: _k8s_list_deployments(**a),
-    'k8s_get_deployment_status': lambda a: _k8s_get_deployment_status(**a),
-    'k8s_list_services':         lambda a: _k8s_list_services(**a),
-    'k8s_get_configmap':         lambda a: _k8s_get_configmap(**a),
-    'k8s_get_namespace_events':  lambda a: _k8s_get_namespace_events(**a),
-    'k8s_list_statefulsets':     lambda a: _k8s_list_statefulsets(**a),
-    # NEW tools
-    'k8s_top_pods':              lambda a: _k8s_top_pods(**a),
-    'k8s_list_pvcs':             lambda a: _k8s_list_pvcs(**a),
-    'k8s_list_secrets':          lambda a: _k8s_list_secrets(**a),
-    'k8s_list_rolebindings':     lambda a: _k8s_list_rolebindings(**a),
-    'k8s_list_hpa':              lambda a: _k8s_list_hpa(**a),
-    'k8s_list_jobs':             lambda a: _k8s_list_jobs(**a),
-    'k8s_list_nodes':            lambda a: _k8s_list_nodes(),
-    'k8s_check_endpoints':       lambda a: _k8s_check_endpoints(**a),
-    'k8s_namespace_summary':     lambda a: _k8s_namespace_summary(**a),
-}
+    # Dispatcher: maps function name → Python function call
+    _K8S_TOOL_MAP = {
+        'k8s_list_pods':             lambda a: _k8s_list_pods(**a),
+        'k8s_get_pod_logs':          lambda a: _k8s_get_pod_logs(**a),
+        'k8s_get_pod_events':        lambda a: _k8s_get_pod_events(**a),
+        'k8s_describe_pod':          lambda a: _k8s_describe_pod(**a),
+        'k8s_list_deployments':      lambda a: _k8s_list_deployments(**a),
+        'k8s_get_deployment_status': lambda a: _k8s_get_deployment_status(**a),
+        'k8s_list_services':         lambda a: _k8s_list_services(**a),
+        'k8s_get_configmap':         lambda a: _k8s_get_configmap(**a),
+        'k8s_get_namespace_events':  lambda a: _k8s_get_namespace_events(**a),
+        'k8s_list_statefulsets':     lambda a: _k8s_list_statefulsets(**a),
+        # NEW tools
+        'k8s_top_pods':              lambda a: _k8s_top_pods(**a),
+        'k8s_list_pvcs':             lambda a: _k8s_list_pvcs(**a),
+        'k8s_list_secrets':          lambda a: _k8s_list_secrets(**a),
+        'k8s_list_rolebindings':     lambda a: _k8s_list_rolebindings(**a),
+        'k8s_list_hpa':              lambda a: _k8s_list_hpa(**a),
+        'k8s_list_jobs':             lambda a: _k8s_list_jobs(**a),
+        'k8s_list_nodes':            lambda a: _k8s_list_nodes(),
+        'k8s_check_endpoints':       lambda a: _k8s_check_endpoints(**a),
+        'k8s_namespace_summary':     lambda a: _k8s_namespace_summary(**a),
+        # ACTION tools
+        'k8s_scale_deployment':      lambda a: _k8s_scale_deployment(**a),
+        'k8s_restart_deployment':    lambda a: _k8s_restart_deployment(**a),
+        'k8s_delete_pod':            lambda a: _k8s_delete_pod(**a),
+        'k8s_rollback_deployment':   lambda a: _k8s_rollback_deployment(**a),
+        'k8s_exec_command':          lambda a: _k8s_exec_command(**a),
+    }
+else:
+    # google-genai not available — stub out so the app doesn't crash
+    K8S_TOOLS = None
+    _K8S_TOOL_MAP = {}
 
 
 @app.route('/api/ai/converse', methods=['POST'])
@@ -3730,8 +3944,104 @@ def converse():
         return jsonify({'error': 'No message provided'}), 400
 
     if not get_model():
+        # Even without Gemini, try to handle action commands (scale/restart/delete)
+        msg_lower = message.lower()
+        import re as _re
+
+        # Scale: "scale <name> to <N> replicas"
+        scale_match = _re.search(r'scale\s+(\S+)\s+to\s+(\d+)', msg_lower)
+        if scale_match:
+            dep_name = scale_match.group(1)
+            replicas = int(scale_match.group(2))
+            result = _k8s_scale_deployment(namespace, dep_name, replicas)
+            return jsonify({
+                'reply': result,
+                'session_id': session_id,
+                'tools_used': ['k8s_scale_deployment'],
+                'suggested_prompts': [f'Show status of {dep_name}', 'List all deployments', 'Show pods'],
+                'turn': 1
+            })
+
+        # Restart: "restart <name>"
+        restart_match = _re.search(r'restart\s+(\S+)', msg_lower)
+        if restart_match and 'restart' in msg_lower:
+            dep_name = restart_match.group(1)
+            result = _k8s_restart_deployment(namespace, dep_name)
+            return jsonify({
+                'reply': result,
+                'session_id': session_id,
+                'tools_used': ['k8s_restart_deployment'],
+                'suggested_prompts': [f'Show pods for {dep_name}', 'List events'],
+                'turn': 1
+            })
+
+        # Delete pod: "delete pod <name>"
+        delete_match = _re.search(r'delete\s+(?:pod\s+)?(\S+)', msg_lower)
+        if delete_match and 'delete' in msg_lower:
+            pod_name = delete_match.group(1)
+            result = _k8s_delete_pod(namespace, pod_name)
+            return jsonify({
+                'reply': result,
+                'session_id': session_id,
+                'tools_used': ['k8s_delete_pod'],
+                'suggested_prompts': ['List all pods', 'Show events'],
+                'turn': 1
+            })
+        # Rollback: "rollback <name>" or "rollback <name> to revision <N>"
+        rollback_match = _re.search(r'rollback\s+(\S+)(?:\s+to\s+(?:revision\s+)?(\d+))?', msg_lower)
+        if rollback_match:
+            dep_name = rollback_match.group(1)
+            revision = int(rollback_match.group(2)) if rollback_match.group(2) else 0
+            result = _k8s_rollback_deployment(namespace, dep_name, revision)
+            return jsonify({
+                'reply': result,
+                'session_id': session_id,
+                'tools_used': ['k8s_rollback_deployment'],
+                'suggested_prompts': [f'Show status of {dep_name}', 'List deployments'],
+                'turn': 1
+            })
+
+        # Exec: "exec <pod> <command>"
+        exec_match = _re.search(r'exec\s+(\S+)\s+(.+)', msg_lower)
+        if exec_match:
+            pod_name = exec_match.group(1)
+            command = exec_match.group(2).strip()
+            result = _k8s_exec_command(namespace, pod_name, command)
+            return jsonify({
+                'reply': result,
+                'session_id': session_id,
+                'tools_used': ['k8s_exec_command'],
+                'suggested_prompts': ['Show logs for ' + pod_name, 'List pods'],
+                'turn': 1
+            })
+
+        # Run in pod: "run <command> in <pod>"
+        run_match = _re.search(r'run\s+[`"\']?(.+?)[`"\']?\s+(?:in|on|inside)\s+(\S+)', msg_lower)
+        if run_match:
+            command = run_match.group(1).strip()
+            pod_name = run_match.group(2)
+            result = _k8s_exec_command(namespace, pod_name, command)
+            return jsonify({
+                'reply': result,
+                'session_id': session_id,
+                'tools_used': ['k8s_exec_command'],
+                'suggested_prompts': ['Show logs for ' + pod_name, 'List pods'],
+                'turn': 1
+            })
+
         return jsonify({'reply': f'⚠️ AI not configured ({_client_error}). '
-                                  'Check /api/ai/status for details.'})
+                                  'However, I can still execute commands directly.\n\n'
+                                  'Try:\n'
+                                  '- `scale frontend to 3 replicas`\n'
+                                  '- `restart backend-api`\n'
+                                  '- `delete pod payment-processor-0`\n'
+                                  '- `rollback frontend`\n'
+                                  '- `exec backend-pod curl localhost:8080/health`\n\n'
+                                  'For full AI analysis, configure Gemini credentials.'})
+
+    if not K8S_TOOLS:
+        return jsonify({'reply': '⚠️ AI Chat requires google-genai package. '
+                                  'Install it with: pip install google-genai'})
 
     try:
         mdl = get_model()
@@ -3739,17 +4049,26 @@ def converse():
         # System instruction for the agent
         system_instruction = (
             f"You are an expert Kubernetes SRE agent embedded in the GDC Dashboard "
-            f"for namespace '{namespace}'. You have access to 19 live Kubernetes API tools. "
+            f"for namespace '{namespace}'. You have access to 24 live Kubernetes API tools "
+            f"including both READ and WRITE operations.\n"
             f"When the user asks a question:\n"
             f"1. Use the available tools to fetch REAL live data from the cluster\n"
             f"2. Reason over the actual data returned\n"
             f"3. Give a direct, specific, data-backed answer — never say 'run this command yourself'\n"
             f"4. Use Markdown formatting with tables where helpful\n"
             f"5. Be concise and actionable\n\n"
-            f"You can troubleshoot: pods, deployments, statefulsets, services, configmaps, "
-            f"events, logs, memory/OOM, CPU/throttling, PVC/storage, secrets, RBAC/permissions, "
-            f"HPA/autoscaling, jobs/cronjobs, node health, networking/DNS endpoints, "
-            f"and overall namespace health.\n\n"
+            f"CAPABILITIES:\n"
+            f"- READ: list pods, deployments, services, statefulsets, configmaps, secrets, "
+            f"events, logs, PVCs, HPA, jobs, nodes, endpoints, namespace summary\n"
+            f"- WRITE: scale deployments/statefulsets (k8s_scale_deployment), "
+            f"rolling restart deployments (k8s_restart_deployment), "
+            f"delete pods (k8s_delete_pod)\n"
+            f"- ROLLBACK: undo a bad deploy (k8s_rollback_deployment) — reverts to previous "
+            f"or a specific revision number\n"
+            f"- EXEC: run commands inside pods (k8s_exec_command) — curl, ls, env, ps, "
+            f"nslookup, df, cat, etc. Dangerous commands are blocked.\n\n"
+            f"When asked to scale, restart, delete, rollback, or exec — USE the action tools directly. "
+            f"Do NOT say you cannot perform actions. You CAN.\n\n"
             f"Current namespace: {namespace}"
         )
 
