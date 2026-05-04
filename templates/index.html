@@ -1973,19 +1973,21 @@
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <!-- Client-side mock data for demo/offline mode (file:// protocol) -->
     <script>
-        // Resolve mock_data.js path for both file:// and http:// modes
+        // Resolve mock_data.js path — ONLY for file:// (offline demo) mode.
+        // On the cluster (http://), mock_data.js is NOT needed because the
+        // real K8s API backend is available. Loading it via http would also
+        // cause 'Unexpected token <' errors when the auth middleware
+        // intercepts the request and returns the CIDP login page.
         (function() {
-            var s = document.createElement('script');
             if (window.location.protocol === 'file:') {
-                // When opened as file, resolve relative to templates/../static/
+                var s = document.createElement('script');
                 var dir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
                 var parent = dir.substring(0, dir.lastIndexOf('/'));
                 s.src = 'file://' + parent + '/static/mock_data.js';
-            } else {
-                s.src = '/static/mock_data.js';
+                s.async = false;
+                document.head.appendChild(s);
             }
-            s.async = false;
-            document.head.appendChild(s);
+            // http:// mode: skip mock_data.js entirely — real APIs are used.
         })();
     </script>
 </head>
@@ -4612,6 +4614,14 @@
                     fetch(`/api/virtualservices?namespace=${currentNamespace}`)
                 ]);
 
+                // If any response is a 401 (session expired), the fetch wrapper
+                // already showed the auth banner. Bail silently.
+                if (workloadsRes.status === 401 || servicesRes.status === 401 || vsRes.status === 401) {
+                    timestampEl.innerText = '⚠️ Session expired — please re-authenticate';
+                    timestampEl.style.color = '#dc3545';
+                    return;  // don't throw, don't spam the console
+                }
+
                 if (!workloadsRes.ok) throw new Error(`Workloads API: ${workloadsRes.statusText}`);
                 if (!servicesRes.ok) throw new Error(`Services API: ${servicesRes.statusText}`);
                 if (!vsRes.ok) throw new Error(`VirtualServices API: ${vsRes.statusText}`);
@@ -4619,6 +4629,13 @@
                 const workloads = await workloadsRes.json();
                 const services = await servicesRes.json();
                 const virtualServices = await vsRes.json();
+
+                // Check for session_expired in the JSON body (from our synthetic 401 responses)
+                if (workloads.error === 'session_expired' || services.error === 'session_expired') {
+                    timestampEl.innerText = '⚠️ Session expired — please re-authenticate';
+                    timestampEl.style.color = '#dc3545';
+                    return;
+                }
 
                 if (workloads.error) throw new Error(workloads.error);
                 if (services.error) throw new Error(services.error);
