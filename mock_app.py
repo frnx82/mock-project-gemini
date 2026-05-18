@@ -179,11 +179,11 @@ def get_services():
 @app.route('/api/virtualservices')
 def get_virtualservices():
     """Rich mock VirtualServices to demonstrate Networking + AI features."""
-    ns = request.args.get('namespace', 'dbsleuth-dev')
+    ns = request.args.get('namespace', 'dummyapp-dev')
     return jsonify([
         {
             'name': 'api-gateway-vs',
-            'hosts': 'api.dbsleuth-dev.internal, api.example.com',
+            'hosts': 'api.dummyapp-dev.internal, api.example.com',
             'gateways': 'istio-ingressgateway, mesh',
             'age': '14d',
             'http_routes': 2,
@@ -197,7 +197,7 @@ def get_virtualservices():
         },
         {
             'name': 'payment-processor-vs',
-            'hosts': 'payment-processor.dbsleuth-dev.svc.cluster.local',
+            'hosts': 'payment-processor.dummyapp-dev.svc.cluster.local',
             'gateways': 'mesh',
             'age': '7d',
             'http_routes': 1,
@@ -211,7 +211,7 @@ def get_virtualservices():
         },
         {
             'name': 'frontend-vs',
-            'hosts': 'frontend.dbsleuth-dev.internal, www.example.com',
+            'hosts': 'frontend.dummyapp-dev.internal, www.example.com',
             'gateways': 'istio-ingressgateway',
             'age': '22d',
             'http_routes': 3,
@@ -225,7 +225,7 @@ def get_virtualservices():
         },
         {
             'name': 'analytics-service-vs',
-            'hosts': 'analytics.dbsleuth-dev.svc.cluster.local',
+            'hosts': 'analytics.dummyapp-dev.svc.cluster.local',
             'gateways': 'mesh',
             'age': '3d',
             'http_routes': 1,
@@ -238,7 +238,7 @@ def get_virtualservices():
         },
         {
             'name': 'database-svc-vs',
-            'hosts': 'database-svc.dbsleuth-dev.svc.cluster.local',
+            'hosts': 'database-svc.dummyapp-dev.svc.cluster.local',
             'gateways': 'mesh',
             'age': '30d',
             'http_routes': 1,
@@ -3030,10 +3030,10 @@ def mock_health_pulse():
             'issue':f"{failing[0].get('name')} is in **{failing[0].get('status')}** state — may cause service degradation.",
             'action':f"kubectl describe pod {failing[0].get('name')} -n {ns}"})
     issues += [
-        {'severity':'warning','resource':'dbsleuth-dev-ml-inference','kind':'Deployment',
+        {'severity':'warning','resource':'dummyapp-dev-ml-inference','kind':'Deployment',
          'issue':'Running with **1 replica** — no redundancy. A pod failure will cause full outage.',
-         'action':'kubectl scale deployment dbsleuth-dev-ml-inference --replicas=2'},
-        {'severity':'info','resource':'dbsleuth-dev-billing-service','kind':'Deployment',
+         'action':'kubectl scale deployment dummyapp-dev-ml-inference --replicas=2'},
+        {'severity':'info','resource':'dummyapp-dev-billing-service','kind':'Deployment',
          'issue':'`LOG_LEVEL=DEBUG` detected — may expose sensitive data in production logs.',
          'action':'Set LOG_LEVEL=INFO in the ConfigMap or deployment env section'},
         {'severity':'info','resource':'api-token','kind':'Secret',
@@ -3141,8 +3141,8 @@ def mock_configmap_impact():
     return jsonify({'configmap':name,
         'summary':f'ConfigMap **{name}** is referenced by **3 workloads** in this namespace.',
         'consumers':[
-            {'name':'dbsleuth-dev-frontend-deployment','kind':'Deployment','mounted_as':'env','critical_keys':['API_ENDPOINT','TIMEOUT_MS']},
-            {'name':'dbsleuth-dev-backend-api','kind':'Deployment','mounted_as':'volumeMount (/etc/config)','critical_keys':['DB_HOST','POOL_SIZE']},
+            {'name':'dummyapp-dev-frontend-deployment','kind':'Deployment','mounted_as':'env','critical_keys':['API_ENDPOINT','TIMEOUT_MS']},
+            {'name':'dummyapp-dev-backend-api','kind':'Deployment','mounted_as':'volumeMount (/etc/config)','critical_keys':['DB_HOST','POOL_SIZE']},
             {'name':'nightly-report-job','kind':'Job','mounted_as':'env','critical_keys':['REPORT_RECIPIENTS']},
         ],
         'risky_keys':[
@@ -3169,8 +3169,8 @@ def mock_secret_audit():
         'risk_level':'high' if overdue else 'medium',
         'risk_summary':f'Secret **{name}** is **{age_days} days old** — {"rotation OVERDUE (policy: 90 days)." if overdue else "within rotation policy."}',
         'consumers':[
-            {'name':'dbsleuth-dev-backend-api','kind':'Deployment','mount_method':'secretRef (env)'},
-            {'name':'dbsleuth-dev-billing-service','kind':'Deployment','mount_method':'volumeMount'},
+            {'name':'dummyapp-dev-backend-api','kind':'Deployment','mount_method':'secretRef (env)'},
+            {'name':'dummyapp-dev-billing-service','kind':'Deployment','mount_method':'volumeMount'},
         ],
         'is_orphaned':False,
         'security_flags':[
@@ -3593,21 +3593,21 @@ def mock_vuln_scan():
         {
             "severity": "Critical",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-frontend-deployment",
+            "resource": "dummyapp-dev-frontend-deployment",
             "kind": "Deployment",
             "image": "nginx:1.21.0",
             "package": "nginx",
             "installed_version": "1.21.0",
             "fixed_version": "1.25.3",
             "issue": "CVE-2021-23017 — nginx resolver off-by-one heap write allows remote code execution via crafted DNS response",
-            "remediation": "kubectl set image deployment/dbsleuth-dev-frontend-deployment main=nginx:1.25.3",
+            "remediation": "kubectl set image deployment/dummyapp-dev-frontend-deployment main=nginx:1.25.3",
             "cve_references": ["CVE-2021-23017"],
             "ai_insight": "This nginx version predates multiple critical patches; updating to 1.25.3 resolves all known RCE vectors."
         },
         {
             "severity": "Critical",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-backend-api",
+            "resource": "dummyapp-dev-backend-api",
             "kind": "Deployment",
             "image": "python:3.9-slim",
             "package": "openssl",
@@ -3621,7 +3621,7 @@ def mock_vuln_scan():
         {
             "severity": "High",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-billing-service",
+            "resource": "dummyapp-dev-billing-service",
             "kind": "Deployment",
             "image": "node:16-alpine",
             "package": "zlib",
@@ -3635,7 +3635,7 @@ def mock_vuln_scan():
         {
             "severity": "High",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-backend-api",
+            "resource": "dummyapp-dev-backend-api",
             "kind": "Deployment",
             "image": "python:3.9-slim",
             "package": "pip (cryptography)",
@@ -3649,7 +3649,7 @@ def mock_vuln_scan():
         {
             "severity": "High",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-ml-inference",
+            "resource": "dummyapp-dev-ml-inference",
             "kind": "Deployment",
             "image": "pytorch/pytorch:1.13.0-cuda11.6-cudnn8-runtime",
             "package": "torch",
@@ -3663,7 +3663,7 @@ def mock_vuln_scan():
         {
             "severity": "Medium",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-frontend-deployment",
+            "resource": "dummyapp-dev-frontend-deployment",
             "kind": "Deployment",
             "image": "nginx:1.21.0",
             "package": "libssl1.1",
@@ -3677,7 +3677,7 @@ def mock_vuln_scan():
         {
             "severity": "Medium",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-billing-service",
+            "resource": "dummyapp-dev-billing-service",
             "kind": "Deployment",
             "image": "node:16-alpine",
             "package": "npm (glob-parent)",
@@ -3691,7 +3691,7 @@ def mock_vuln_scan():
         {
             "severity": "Low",
             "category": "OSS Vulnerability",
-            "resource": "dbsleuth-dev-backend-api",
+            "resource": "dummyapp-dev-backend-api",
             "kind": "Deployment",
             "image": "python:3.9-slim",
             "package": "curl",
