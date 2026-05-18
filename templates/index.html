@@ -641,55 +641,58 @@
            Overrides all light-mode styles above.  No JS changes needed.
            ═══════════════════════════════════════════════════════════════════ */
         :root {
-            --bg-page:      #0f1117;
-            --bg-surface:   #1a1b2e;
-            --bg-elevated:  #1e1f35;
-            --bg-hover:     #262840;
-            --border:       #2a2b45;
+            --bg-page: #0f1117;
+            --bg-surface: #1a1b2e;
+            --bg-elevated: #1e1f35;
+            --bg-hover: #262840;
+            --border: #2a2b45;
             --border-light: #353660;
             --text-primary: #e2e4e9;
-            --text-secondary:#8b8fa3;
-            --text-muted:   #5e6178;
-            --accent:       #6366f1;
+            --text-secondary: #8b8fa3;
+            --text-muted: #5e6178;
+            --accent: #6366f1;
             --accent-hover: #818cf8;
-            --success:      #22c55e;
-            --warning:      #f59e0b;
-            --danger:       #ef4444;
-            --info:         #3b82f6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
         }
 
         /* ── Light Mode Variable Overrides ───────────────────────── */
         body.light-mode {
-            --bg-page:      #f5f6fa;
-            --bg-surface:   #ffffff;
-            --bg-elevated:  #ffffff;
-            --bg-hover:     #f0f1f5;
-            --border:       #dde1e8;
+            --bg-page: #f5f6fa;
+            --bg-surface: #ffffff;
+            --bg-elevated: #ffffff;
+            --bg-hover: #f0f1f5;
+            --border: #dde1e8;
             --border-light: #e8ecf1;
             --text-primary: #1a1c24;
-            --text-secondary:#5a5f72;
-            --text-muted:   #8b8fa3;
-            --accent:       #4f46e5;
+            --text-secondary: #5a5f72;
+            --text-muted: #8b8fa3;
+            --accent: #4f46e5;
             --accent-hover: #6366f1;
-            --success:      #16a34a;
-            --warning:      #d97706;
-            --danger:       #dc2626;
-            --info:         #2563eb;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #2563eb;
         }
+
         /* Light mode: help-chip adjustments */
         body.light-mode .help-chip {
             background: #f0f1f5;
             border-color: #dde1e8;
             color: #444;
         }
+
         body.light-mode .help-chip:hover {
             background: #e8f0fe;
             border-color: #4f46e5;
             color: #4f46e5;
         }
+
         /* Light mode: code inline blocks */
         body.light-mode code {
-            background: rgba(79,70,229,0.08) !important;
+            background: rgba(79, 70, 229, 0.08) !important;
             color: #4f46e5 !important;
         }
 
@@ -743,10 +746,12 @@
         body.light-mode [style*="color: #e2e4e9"] {
             color: #1a1c24 !important;
         }
+
         body.light-mode [style*="color:#8b8fa3"],
         body.light-mode [style*="color: #8b8fa3"] {
             color: #5a5f72 !important;
         }
+
         body.light-mode [style*="color:#5e6178"],
         body.light-mode [style*="color: #5e6178"] {
             color: #8b8fa3 !important;
@@ -754,9 +759,9 @@
 
         /* Label badges in light mode */
         body.light-mode .label-badge {
-            background: rgba(79,70,229,0.1) !important;
+            background: rgba(79, 70, 229, 0.1) !important;
             color: #4f46e5 !important;
-            border-color: rgba(79,70,229,0.2) !important;
+            border-color: rgba(79, 70, 229, 0.2) !important;
         }
 
         /* Health pulse banners — light mode */
@@ -764,12 +769,14 @@
         body.light-mode #net-health-content {
             background: #ffffff !important;
             border-color: #dde1e8 !important;
-            box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .06) !important;
         }
+
         body.light-mode #pulse-score-text,
         body.light-mode #net-score-text {
             color: #1a1c24 !important;
         }
+
         body.light-mode #pulse-summary-text,
         body.light-mode #net-summary-text {
             color: #5a5f72 !important;
@@ -781,10 +788,12 @@
             color: #5a5f72 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode .top-tab-btn:hover {
             border-color: #4f46e5 !important;
             color: #4f46e5 !important;
         }
+
         body.light-mode .top-tab-btn.active {
             background: #4f46e5 !important;
             color: #fff !important;
@@ -799,6 +808,7 @@
             color: #1a1c24 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode input[type="text"][id^="wl-search"]:focus,
         body.light-mode input[type="text"][id^="svc-search"]:focus,
         body.light-mode input[type="text"][id^="vs-search"]:focus {
@@ -811,6 +821,7 @@
             color: #5a5f72 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode .sec-cat-btn:hover,
         body.light-mode .sec-cat-btn.active {
             background: #4f46e5 !important;
@@ -833,6 +844,7 @@
         body.light-mode select {
             color: #1a1c24 !important;
         }
+
         body.light-mode option {
             background: #ffffff !important;
             color: #1a1c24 !important;
@@ -854,51 +866,63 @@
             background: linear-gradient(135deg, #4a00e0, #6f42c1) !important;
             border-bottom: 1px solid #5a2dba !important;
         }
+
         body.light-mode #chat-panel {
             background: #ffffff !important;
             border-left: 1px solid #dde1e8 !important;
-            box-shadow: -4px 0 20px rgba(0,0,0,0.08) !important;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08) !important;
         }
+
         body.light-mode #chat-messages {
             background: #f5f6fa !important;
         }
+
         body.light-mode .chat-bubble.assistant {
             background: #ffffff !important;
             color: #1a1c24 !important;
             border: 1px solid #dde1e8 !important;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
         }
+
         body.light-mode .chat-bubble.user {
             background: #4f46e5 !important;
             color: #fff !important;
         }
+
         body.light-mode #chat-input {
             background: #ffffff !important;
             color: #1a1c24 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode #chat-input:focus {
             border-color: #4f46e5 !important;
         }
+
         body.light-mode #chat-input-area {
             background: #ffffff !important;
             border-top-color: #dde1e8 !important;
         }
+
         body.light-mode #chat-send-btn {
             background: #4f46e5 !important;
         }
+
         body.light-mode .chat-chip {
             background: #f0f1f5 !important;
             color: #4f46e5 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode .chat-chip:hover {
             background: #4f46e5 !important;
             color: #fff !important;
         }
+
         body.light-mode .chat-ts {
             color: #8b8fa3 !important;
         }
+
         body.light-mode #chat-footer-label {
             color: #8b8fa3 !important;
         }
@@ -913,6 +937,7 @@
             background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
             color: #1a1c24 !important;
         }
+
         /* ── Dark code/monospace cells (reusable class) ─────────── */
         .dark-code-cell {
             font-family: monospace;
@@ -922,20 +947,24 @@
             border-radius: 4px;
             padding: 4px 6px;
         }
+
         body.light-mode .dark-code-cell {
             background: #f0f1f5 !important;
             color: #1a1c24 !important;
         }
+
         /* Direct ID overrides for stubborn inline styles */
         body.light-mode #yaml-gen-output {
             background: #f8f9fb !important;
             color: #1a1c24 !important;
             border: 1px solid #dde1e8 !important;
         }
+
         body.light-mode #sec-summary-card,
         body.light-mode #sec-summary-card * {
             color: #1a1c24 !important;
         }
+
         body.light-mode #sec-summary-card {
             background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
         }
@@ -945,24 +974,30 @@
             background: linear-gradient(135deg, #1a1a2e, #16213e);
             color: #e0e0e0;
         }
+
         body.light-mode .sec-assessment-card {
             background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
             color: #1a1c24 !important;
         }
+
         body.light-mode .sec-assessment-card * {
             color: #1a1c24 !important;
         }
+
         body.light-mode .sec-assessment-card strong[style*="color:#a78bfa"] {
             color: #4f46e5 !important;
         }
+
         body.light-mode #sec-summary-card {
             background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
             color: #1a1c24 !important;
         }
+
         body.light-mode #sec-summary-card p,
         body.light-mode #sec-summary-card strong {
             color: #1a1c24 !important;
         }
+
         body.light-mode #sec-summary-card strong[style*="color:#a78bfa"] {
             color: #4f46e5 !important;
         }
@@ -978,6 +1013,7 @@
             background: #e8ecf1 !important;
             color: #5a5f72 !important;
         }
+
         body.light-mode a[style*="background:#333"] {
             background: #e8ecf1 !important;
             color: #4f46e5 !important;
@@ -988,12 +1024,15 @@
             background: #ffffff !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode .opt-cost-label {
             color: #5a5f72 !important;
         }
+
         body.light-mode .opt-cost-value {
             color: #1a1c24 !important;
         }
+
         body.light-mode .opt-cost-sub {
             color: #8b8fa3 !important;
         }
@@ -1003,6 +1042,7 @@
             background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
             color: #065f46 !important;
         }
+
         body.light-mode #opt-summary-card span {
             color: #065f46 !important;
         }
@@ -1025,6 +1065,7 @@
             color: #5a5f72 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode .opt-filter-btn.active,
         body.light-mode .opt-filter-btn:hover {
             background: #4f46e5 !important;
@@ -1043,11 +1084,13 @@
             background: #f0f1f5 !important;
             color: #1a1c24 !important;
         }
+
         body.light-mode [style*="background:linear-gradient(135deg,#1a1a2e"],
         body.light-mode [style*="background:linear-gradient(135deg,#1a2e1a"] {
             background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
             color: #1a1c24 !important;
         }
+
         body.light-mode [style*="background:linear-gradient(135deg,#1a2e1a,#1e3a1e)"] {
             background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
             color: #065f46 !important;
@@ -1059,6 +1102,7 @@
             color: #1a1c24 !important;
             border-color: #dde1e8 !important;
         }
+
         body.light-mode [style*="color:#e0e0e0"],
         body.light-mode [style*="color: #e0e0e0"],
         body.light-mode [style*="color:#cdd6f4"],
@@ -1067,19 +1111,23 @@
         body.light-mode [style*="color: #c8f0c8"] {
             color: #1a1c24 !important;
         }
+
         body.light-mode [style*="color:#a0d4a0"],
         body.light-mode [style*="color: #a0d4a0"] {
             color: #065f46 !important;
         }
+
         body.light-mode [style*="border-left:4px solid #6f42c1"] {
             border-left-color: #6f42c1 !important;
         }
+
         body.light-mode [style*="border-left:4px solid #0f9d58"] {
             border-left-color: #16a34a !important;
         }
 
         /* Smooth transition for theme switching */
-        body, body * {
+        body,
+        body * {
             transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
         }
 
@@ -1099,10 +1147,12 @@
             transition: all 0.2s ease;
             white-space: nowrap;
         }
+
         .theme-toggle:hover {
             border-color: var(--accent);
             color: var(--accent);
         }
+
         .theme-toggle .theme-icon {
             font-size: 16px;
             transition: transform 0.3s ease;
@@ -1114,19 +1164,29 @@
             color: var(--text-primary) !important;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
         }
-        h1, h2, h3, h4 { color: var(--text-primary) !important; }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+            color: var(--text-primary) !important;
+        }
 
         /* ── Panels / Cards ──────────────────────────────────────── */
         .panel {
             background: var(--bg-elevated) !important;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
             border: 1px solid var(--border) !important;
         }
+
         .panel-header {
             color: var(--text-primary) !important;
             border-bottom-color: var(--border) !important;
         }
-        .section-title { color: var(--text-secondary) !important; }
+
+        .section-title {
+            color: var(--text-secondary) !important;
+        }
 
         /* ── Tables ──────────────────────────────────────────────── */
         th {
@@ -1137,21 +1197,37 @@
             text-transform: uppercase !important;
             letter-spacing: 0.5px !important;
         }
+
         td {
             border-bottom: 1px solid var(--border) !important;
             color: var(--text-primary) !important;
         }
-        tr:hover { background-color: var(--bg-hover) !important; }
+
+        tr:hover {
+            background-color: var(--bg-hover) !important;
+        }
 
         /* ── Status text → subtle ────────────────────────────────── */
-        .status-running { color: var(--success) !important; font-weight: 500 !important; }
-        .status-pending { color: var(--warning) !important; font-weight: 500 !important; }
-        .status-failed  { color: var(--danger) !important;  font-weight: 500 !important; }
+        .status-running {
+            color: var(--success) !important;
+            font-weight: 500 !important;
+        }
+
+        .status-pending {
+            color: var(--warning) !important;
+            font-weight: 500 !important;
+        }
+
+        .status-failed {
+            color: var(--danger) !important;
+            font-weight: 500 !important;
+        }
 
         /* ── Main Navigation Tabs (the rainbow buttons) ────────── */
-        .dashboard-container > div:first-child {
+        .dashboard-container>div:first-child {
             border-bottom-color: var(--border) !important;
         }
+
         /* All main-tab buttons → plain text with underline */
         [id^="main-tab-"] {
             background: none !important;
@@ -1165,10 +1241,12 @@
             margin-bottom: -2px !important;
             transition: color 0.2s, border-color 0.2s !important;
         }
+
         [id^="main-tab-"]:hover {
             color: var(--text-primary) !important;
             background: none !important;
         }
+
         [id^="main-tab-"].btn-primary,
         [id^="main-tab-"].active {
             color: var(--accent) !important;
@@ -1185,19 +1263,32 @@
             transition: color 0.2s, border-color 0.2s !important;
             padding: 3px 10px !important;
         }
+
         .ai-btn:hover {
             color: var(--accent) !important;
             border-color: var(--accent) !important;
-            background: rgba(99,102,241,0.08) !important;
+            background: rgba(99, 102, 241, 0.08) !important;
         }
+
         /* Remove all gradient backgrounds from ai-btn variants */
-        .ai-btn-analyze, .ai-btn-diagnose, .ai-btn-insights, .ai-btn-explain,
-        .ai-btn-risk, .ai-btn-correlate, .ai-btn-health, .ai-btn-coverage,
-        .ai-btn-triage, .ai-btn-impact, .ai-btn-audit, .ai-btn-route,
-        .ai-btn-policy, .ai-btn-dep {
+        .ai-btn-analyze,
+        .ai-btn-diagnose,
+        .ai-btn-insights,
+        .ai-btn-explain,
+        .ai-btn-risk,
+        .ai-btn-correlate,
+        .ai-btn-health,
+        .ai-btn-coverage,
+        .ai-btn-triage,
+        .ai-btn-impact,
+        .ai-btn-audit,
+        .ai-btn-route,
+        .ai-btn-policy,
+        .ai-btn-dep {
             background: none !important;
             color: var(--text-secondary) !important;
         }
+
         .ai-btn-heal {
             background: none !important;
             color: var(--danger) !important;
@@ -1206,18 +1297,26 @@
         }
 
         /* ── Generic buttons ─────────────────────────────────── */
-        .btn { border-radius: 6px !important; }
+        .btn {
+            border-radius: 6px !important;
+        }
+
         .btn-primary {
             background-color: var(--accent) !important;
             border: 1px solid var(--accent) !important;
             color: #fff !important;
         }
-        .btn-primary:hover { background-color: var(--accent-hover) !important; }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover) !important;
+        }
+
         .btn-default {
             background-color: var(--bg-surface) !important;
             color: var(--text-secondary) !important;
             border: 1px solid var(--border) !important;
         }
+
         .btn-default:hover {
             background-color: var(--bg-hover) !important;
             color: var(--text-primary) !important;
@@ -1228,15 +1327,20 @@
             color: var(--text-secondary) !important;
             border-bottom-color: transparent !important;
         }
+
         .tab-btn:hover {
             color: var(--text-primary) !important;
             background-color: transparent !important;
         }
+
         .tab-btn.active {
             color: var(--accent) !important;
             border-bottom-color: var(--accent) !important;
         }
-        .panel-tabs { border-bottom-color: var(--border) !important; }
+
+        .panel-tabs {
+            border-bottom-color: var(--border) !important;
+        }
 
         /* ── Nav buttons (filter tabs) ───────────────────────── */
         .nav-btn {
@@ -1244,11 +1348,13 @@
             color: var(--text-secondary) !important;
             border: 1px solid var(--border) !important;
         }
+
         .nav-btn.active {
             background-color: var(--accent) !important;
             color: #fff !important;
             border-color: var(--accent) !important;
         }
+
         .nav-btn:hover:not(.active) {
             background-color: var(--bg-hover) !important;
             color: var(--text-primary) !important;
@@ -1263,28 +1369,84 @@
         }
 
         /* ── Health badges ───────────────────────────────────── */
-        .health-healthy { background: rgba(34,197,94,0.12) !important; color: var(--success) !important; }
-        .health-degraded { background: rgba(245,158,11,0.12) !important; color: var(--warning) !important; }
-        .health-critical { background: rgba(239,68,68,0.12) !important; color: var(--danger) !important; }
-        .health-unknown { background: var(--bg-surface) !important; color: var(--text-secondary) !important; }
+        .health-healthy {
+            background: rgba(34, 197, 94, 0.12) !important;
+            color: var(--success) !important;
+        }
+
+        .health-degraded {
+            background: rgba(245, 158, 11, 0.12) !important;
+            color: var(--warning) !important;
+        }
+
+        .health-critical {
+            background: rgba(239, 68, 68, 0.12) !important;
+            color: var(--danger) !important;
+        }
+
+        .health-unknown {
+            background: var(--bg-surface) !important;
+            color: var(--text-secondary) !important;
+        }
 
         /* ── Job badges ──────────────────────────────────────── */
-        .job-succeeded { background: rgba(34,197,94,0.12) !important; color: var(--success) !important; }
-        .job-running { background: rgba(59,130,246,0.12) !important; color: var(--info) !important; }
-        .job-failed { background: rgba(239,68,68,0.12) !important; color: var(--danger) !important; }
-        .job-pending { background: rgba(245,158,11,0.12) !important; color: var(--warning) !important; }
+        .job-succeeded {
+            background: rgba(34, 197, 94, 0.12) !important;
+            color: var(--success) !important;
+        }
+
+        .job-running {
+            background: rgba(59, 130, 246, 0.12) !important;
+            color: var(--info) !important;
+        }
+
+        .job-failed {
+            background: rgba(239, 68, 68, 0.12) !important;
+            color: var(--danger) !important;
+        }
+
+        .job-pending {
+            background: rgba(245, 158, 11, 0.12) !important;
+            color: var(--warning) !important;
+        }
 
         /* ── Risk cards ──────────────────────────────────────── */
-        .risk-card { background: var(--bg-surface) !important; color: var(--text-primary) !important; }
-        .risk-critical { border-color: var(--danger) !important; }
-        .risk-high { border-color: #f97316 !important; }
-        .risk-medium { border-color: var(--warning) !important; }
-        .risk-low { border-color: var(--success) !important; }
+        .risk-card {
+            background: var(--bg-surface) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .risk-critical {
+            border-color: var(--danger) !important;
+        }
+
+        .risk-high {
+            border-color: #f97316 !important;
+        }
+
+        .risk-medium {
+            border-color: var(--warning) !important;
+        }
+
+        .risk-low {
+            border-color: var(--success) !important;
+        }
 
         /* ── Heal risk badges ────────────────────────────────── */
-        .heal-risk-low { background: rgba(34,197,94,0.12) !important; color: var(--success) !important; }
-        .heal-risk-medium { background: rgba(245,158,11,0.12) !important; color: var(--warning) !important; }
-        .heal-risk-high { background: rgba(239,68,68,0.12) !important; color: var(--danger) !important; }
+        .heal-risk-low {
+            background: rgba(34, 197, 94, 0.12) !important;
+            color: var(--success) !important;
+        }
+
+        .heal-risk-medium {
+            background: rgba(245, 158, 11, 0.12) !important;
+            color: var(--warning) !important;
+        }
+
+        .heal-risk-high {
+            background: rgba(239, 68, 68, 0.12) !important;
+            color: var(--danger) !important;
+        }
 
         /* ── Kubectl hints ───────────────────────────────────── */
         .kubectl-hint {
@@ -1292,34 +1454,56 @@
             color: var(--text-primary) !important;
             border: 1px solid var(--border) !important;
         }
+
         .copy-btn {
             border-color: var(--accent) !important;
             color: var(--accent) !important;
         }
+
         .copy-btn:hover {
             background: var(--accent) !important;
             color: #fff !important;
         }
 
         /* ── Modals ──────────────────────────────────────────── */
-        .modal { background-color: rgba(0,0,0,0.7) !important; }
+        .modal {
+            background-color: rgba(0, 0, 0, 0.7) !important;
+        }
+
         .modal-content {
             background-color: var(--bg-elevated) !important;
             border: 1px solid var(--border) !important;
             color: var(--text-primary) !important;
         }
-        .close { color: var(--text-muted) !important; }
-        .close:hover { color: var(--text-primary) !important; }
 
-        /* Modal headings & text */
-        .modal-content h2, .modal-content h3, .modal-content h4 {
+        .close {
+            color: var(--text-muted) !important;
+        }
+
+        .close:hover {
             color: var(--text-primary) !important;
         }
-        .modal-content p, .modal-content li, .modal-content span, .modal-content div {
+
+        /* Modal headings & text */
+        .modal-content h2,
+        .modal-content h3,
+        .modal-content h4 {
+            color: var(--text-primary) !important;
+        }
+
+        .modal-content p,
+        .modal-content li,
+        .modal-content span,
+        .modal-content div {
             color: inherit;
         }
-        .modal-content strong { color: var(--text-primary); }
-        .modal-content td, .modal-content th {
+
+        .modal-content strong {
+            color: var(--text-primary);
+        }
+
+        .modal-content td,
+        .modal-content th {
             color: var(--text-primary) !important;
             border-color: var(--border) !important;
         }
@@ -1332,32 +1516,40 @@
         }
 
         /* AI Analysis modal summary */
-        #ai-analysis-summary, [id*="analysis-summary"] {
+        #ai-analysis-summary,
+        [id*="analysis-summary"] {
             background: var(--bg-surface) !important;
             color: var(--text-primary) !important;
             border: 1px solid var(--border) !important;
         }
-        #ai-health-score-ring, .health-score-ring {
+
+        #ai-health-score-ring,
+        .health-score-ring {
             background: var(--bg-surface) !important;
             color: var(--text-primary) !important;
         }
+
         /* Loading spinners in modals */
         .modal-content [style*="border:4px solid #eee"],
         .modal-content [style*="border: 4px solid #eee"] {
             border-color: var(--border) !important;
         }
+
         .modal-content [style*="color:#666"],
         .modal-content [style*="color: #666"] {
             color: var(--text-secondary) !important;
         }
+
         .modal-content [style*="color:#333"],
         .modal-content [style*="color: #333"] {
             color: var(--text-primary) !important;
         }
+
         .modal-content [style*="color:#555"],
         .modal-content [style*="color: #555"] {
             color: var(--text-secondary) !important;
         }
+
         .modal-content [style*="color:#1a1a2e"] {
             color: var(--text-primary) !important;
         }
@@ -1378,8 +1570,14 @@
         }
 
         /* Help modal table rows & cells */
-        .modal-content table { border-collapse: collapse; }
-        .modal-content table tr { border-color: var(--border) !important; }
+        .modal-content table {
+            border-collapse: collapse;
+        }
+
+        .modal-content table tr {
+            border-color: var(--border) !important;
+        }
+
         .modal-content table td[style*="border-right"],
         .modal-content table td[style*="border-bottom"] {
             border-color: var(--border) !important;
@@ -1420,7 +1618,8 @@
         }
 
         /* ConfigMap / Secret view modals */
-        #cmModal .modal-content, #secretModal .modal-content {
+        #cmModal .modal-content,
+        #secretModal .modal-content {
             background: var(--bg-elevated) !important;
         }
 
@@ -1441,22 +1640,27 @@
             background: var(--bg-elevated) !important;
             border: 1px solid var(--border) !important;
         }
+
         #ggm-body {
             color: var(--text-primary) !important;
         }
+
         #ggm-body h4 {
             color: var(--text-primary) !important;
         }
+
         /* Verdict banners */
         #ggm-body [style*="background:#fafafa"],
         #ggm-body [style*="background:#f8f9fa"] {
             background: var(--bg-surface) !important;
         }
+
         /* Positive signal badges */
         #ggm-body [style*="background:#d4edda"] {
-            background: rgba(34,197,94,0.15) !important;
+            background: rgba(34, 197, 94, 0.15) !important;
             color: #22c55e !important;
         }
+
         /* Risk / advice cards with light backgrounds */
         #ggm-body [style*="background:#f8f0ff"],
         #ggm-body [style*="background:#f0f4ff"],
@@ -1465,17 +1669,20 @@
         #ggm-body [style*="background:#fff8f8"] {
             background: var(--bg-surface) !important;
         }
+
         /* Text colors in generated content */
         #ggm-body [style*="color:#555"],
         #ggm-body [style*="color:#333"] {
             color: var(--text-secondary) !important;
         }
+
         /* Inline code in modals */
         #ggm-body code[style*="background:#eee"],
         #ggm-body code[style*="background:#f0f0f0"] {
-            background: rgba(99,102,241,0.15) !important;
+            background: rgba(99, 102, 241, 0.15) !important;
             color: #818cf8 !important;
         }
+
         /* Pod diagnose border separators */
         #ggm-body [style*="border-bottom:1px solid #f0f0f0"] {
             border-color: var(--border) !important;
@@ -1485,27 +1692,35 @@
         #explainModal .modal-content {
             background: var(--bg-elevated) !important;
         }
-        #ex-purpose, #ex-keys, #ex-concerns, #ex-recs {
+
+        #ex-purpose,
+        #ex-keys,
+        #ex-concerns,
+        #ex-recs {
             color: var(--text-primary) !important;
         }
+
         /* Security concern cards */
         #ex-concerns [style*="background:#fff8f8"] {
             background: var(--bg-surface) !important;
         }
+
         #ex-concerns [style*="color:#333"] {
             color: var(--text-primary) !important;
         }
+
         #ex-keys code[style*="background:#f0f0f0"] {
-            background: rgba(99,102,241,0.15) !important;
+            background: rgba(99, 102, 241, 0.15) !important;
             color: #818cf8 !important;
         }
+
         #ex-keys [style*="color:#555"] {
             color: var(--text-secondary) !important;
         }
 
         /* _mdLite inline code fix */
         code[style*="background:#f0f0f0"] {
-            background: rgba(99,102,241,0.15) !important;
+            background: rgba(99, 102, 241, 0.15) !important;
             color: #818cf8 !important;
         }
 
@@ -1513,30 +1728,44 @@
         body:not(.light-mode) #chat-panel {
             background: var(--bg-elevated) !important;
             border-left: 1px solid var(--border) !important;
-            box-shadow: -4px 0 20px rgba(0,0,0,0.4) !important;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4) !important;
         }
+
         body:not(.light-mode) #chat-header {
             background: var(--bg-surface) !important;
             border-bottom: 1px solid var(--border) !important;
         }
-        body:not(.light-mode) #chat-messages { background: var(--bg-page) !important; }
+
+        body:not(.light-mode) #chat-messages {
+            background: var(--bg-page) !important;
+        }
+
         body:not(.light-mode) .chat-bubble.user {
             background: var(--accent) !important;
             color: #fff !important;
         }
+
         body:not(.light-mode) .chat-bubble.assistant {
             background: var(--bg-surface) !important;
             color: var(--text-primary) !important;
             box-shadow: none !important;
             border: 1px solid var(--border) !important;
         }
-        body:not(.light-mode) #chat-input-area { border-top-color: var(--border) !important; }
+
+        body:not(.light-mode) #chat-input-area {
+            border-top-color: var(--border) !important;
+        }
+
         body:not(.light-mode) #chat-input {
             background: var(--bg-surface) !important;
             border-color: var(--border) !important;
             color: var(--text-primary) !important;
         }
-        body:not(.light-mode) #chat-input:focus { border-color: var(--accent) !important; }
+
+        body:not(.light-mode) #chat-input:focus {
+            border-color: var(--accent) !important;
+        }
+
         body:not(.light-mode) #chat-send-btn {
             background: var(--accent) !important;
         }
@@ -1547,6 +1776,7 @@
             border-color: var(--border) !important;
             color: var(--text-secondary) !important;
         }
+
         .container-log-tab.active {
             background: var(--bg-page) !important;
             color: var(--text-primary) !important;
@@ -1559,6 +1789,7 @@
             border-color: var(--border) !important;
             color: var(--text-primary) !important;
         }
+
         #cm-content {
             background: var(--bg-page) !important;
             color: var(--text-primary) !important;
@@ -1569,41 +1800,76 @@
             background: var(--bg-surface) !important;
             border-color: var(--border) !important;
         }
+
         #ask-ai-outer.focused {
             border-color: var(--accent) !important;
-            box-shadow: 0 0 0 2px rgba(99,102,241,0.2) !important;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
             background: var(--bg-surface) !important;
         }
+
         #ai-query-input {
             color: var(--text-primary) !important;
         }
-        #ai-query-input::placeholder { color: var(--text-muted) !important; }
+
+        #ai-query-input::placeholder {
+            color: var(--text-muted) !important;
+        }
+
         #ask-ai-suggestions {
             background: var(--bg-elevated) !important;
             border-color: var(--border) !important;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.4) !important;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
         }
-        .ask-ai-item { color: var(--text-primary) !important; }
-        .ask-ai-item:hover, .ask-ai-item.highlighted {
+
+        .ask-ai-item {
+            color: var(--text-primary) !important;
+        }
+
+        .ask-ai-item:hover,
+        .ask-ai-item.highlighted {
             background: var(--bg-hover) !important;
         }
-        .ask-ai-cat { color: var(--text-muted) !important; }
+
+        .ask-ai-cat {
+            color: var(--text-muted) !important;
+        }
 
         /* ── Scrollbar ───────────────────────────────────────── */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg-page); }
-        ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-page);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-light);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
 
         /* ── Selection ───────────────────────────────────────── */
-        ::selection { background: rgba(99,102,241,0.3); color: #fff; }
+        ::selection {
+            background: rgba(99, 102, 241, 0.3);
+            color: #fff;
+        }
 
         /* ── Security severity badges → muted ────────────────── */
-        [style*="background:#dc3545"], [style*="background: #dc3545"],
-        [style*="background:#fd7e14"], [style*="background: #fd7e14"],
-        [style*="background:#ffc107"], [style*="background: #ffc107"],
-        [style*="background:#28a745"], [style*="background: #28a745"],
-        [style*="background:#6c757d"], [style*="background: #6c757d"] {
+        [style*="background:#dc3545"],
+        [style*="background: #dc3545"],
+        [style*="background:#fd7e14"],
+        [style*="background: #fd7e14"],
+        [style*="background:#ffc107"],
+        [style*="background: #ffc107"],
+        [style*="background:#28a745"],
+        [style*="background: #28a745"],
+        [style*="background:#6c757d"],
+        [style*="background: #6c757d"] {
             opacity: 0.85;
         }
 
@@ -1629,6 +1895,7 @@
         [style*="background-color: white"] {
             background: var(--bg-surface) !important;
         }
+
         [style*="background:#f8f9fa"],
         [style*="background: #f8f9fa"],
         [style*="background:#f4f4f4"],
@@ -1672,25 +1939,31 @@
         [style*="color: #333"] {
             color: var(--text-primary) !important;
         }
+
         [style*="color:#444"],
         [style*="color: #444"] {
             color: var(--text-primary) !important;
         }
+
         [style*="color:#555"],
         [style*="color: #555"] {
             color: var(--text-secondary) !important;
         }
+
         [style*="color:#666"],
         [style*="color: #666"] {
             color: var(--text-secondary) !important;
         }
+
         [style*="color:#222"],
         [style*="color: #222"] {
             color: var(--text-primary) !important;
         }
+
         [style*="color:#1a1a2e"] {
             color: var(--text-primary) !important;
         }
+
         [style*="color:#888"],
         [style*="color: #888"] {
             color: var(--text-muted) !important;
@@ -1711,12 +1984,15 @@
         [style*="border: 1px solid #bbb"] {
             border-color: var(--border) !important;
         }
+
         [style*="border:2px solid #4285f4"] {
             border-color: #4285f4 !important;
         }
+
         [style*="border:2px solid #6f42c1"] {
             border-color: #6f42c1 !important;
         }
+
         [style*="border-bottom:1px solid #f0f0f0"],
         [style*="border-bottom: 1px solid #f0f0f0"],
         [style*="border-bottom:1px solid #f4f4f4"],
@@ -1727,12 +2003,14 @@
         [style*="border-bottom: 2px solid #dee2e6"] {
             border-bottom-color: var(--border) !important;
         }
+
         [style*="border-top:1px solid #e9ecef"],
         [style*="border-top: 1px solid #e9ecef"],
         [style*="border-top:1px solid #eee"],
         [style*="border-top: 1px solid #eee"] {
             border-top-color: var(--border) !important;
         }
+
         [style*="border-right:1px solid"],
         [style*="border-left:1px solid #ddd"],
         [style*="border-left: 1px solid #ddd"] {
@@ -1744,7 +2022,7 @@
         code[style*="background: #f0f0f0"],
         code[style*="background:#eee"],
         code[style*="background: #eee"] {
-            background: rgba(99,102,241,0.15) !important;
+            background: rgba(99, 102, 241, 0.15) !important;
             color: #818cf8 !important;
         }
 
@@ -1757,8 +2035,9 @@
         /* ── Error / red-tinted backgrounds → dark red ──────────── */
         [style*="background:#fff5f5"],
         [style*="background: #fff5f5"] {
-            background: rgba(239,68,68,0.1) !important;
+            background: rgba(239, 68, 68, 0.1) !important;
         }
+
         [style*="color:#c00"] {
             color: #f87171 !important;
         }
@@ -1766,11 +2045,12 @@
         /* ── Warning tinted backgrounds → dark amber ────────────── */
         [style*="background:#fff3cd"],
         [style*="background: #fff3cd"] {
-            background: rgba(245,158,11,0.12) !important;
+            background: rgba(245, 158, 11, 0.12) !important;
         }
+
         [style*="background:#fff8e1"],
         [style*="background: #fff8e1"] {
-            background: rgba(245,158,11,0.08) !important;
+            background: rgba(245, 158, 11, 0.08) !important;
         }
 
         /* ── Progress bar track background ──────────────────────── */
@@ -1783,11 +2063,13 @@
             background: var(--bg-elevated) !important;
             border-top-color: var(--border) !important;
         }
+
         #chat-input {
             background: var(--bg-surface) !important;
             border-color: var(--border) !important;
             color: var(--text-primary) !important;
         }
+
         #chat-input:focus {
             border-color: #6f42c1 !important;
         }
@@ -1803,6 +2085,7 @@
             border-color: var(--border) !important;
             color: var(--text-secondary) !important;
         }
+
         button[style*="border:1px solid #bbb"][style*="border-radius:50%"]:hover {
             border-color: var(--accent) !important;
             color: var(--accent) !important;
@@ -1810,14 +2093,16 @@
 
         /* ── Help modal "Ask AI" card backgrounds ───────────────── */
         .chat-chip[style*="background:#e8f0fe"] {
-            background: rgba(66,133,244,0.15) !important;
-            border-color: rgba(66,133,244,0.3) !important;
+            background: rgba(66, 133, 244, 0.15) !important;
+            border-color: rgba(66, 133, 244, 0.3) !important;
         }
+
         [style*="background:#e8f0fe"] {
-            background: rgba(66,133,244,0.15) !important;
+            background: rgba(66, 133, 244, 0.15) !important;
         }
+
         [style*="background:#f0ebff"] {
-            background: rgba(111,66,193,0.15) !important;
+            background: rgba(111, 66, 193, 0.15) !important;
         }
 
         /* ── Feature map table row alternation ──────────────────── */
@@ -1839,12 +2124,14 @@
             background: var(--bg-surface) !important;
             border-color: var(--border) !important;
         }
+
         #log-correlate-box em {
             color: var(--text-muted) !important;
         }
 
         /* ── Vulnerability scanner UI ───────────────────────────── */
-        #vuln-meta, #vuln-placeholder {
+        #vuln-meta,
+        #vuln-placeholder {
             color: var(--text-secondary) !important;
         }
 
@@ -1888,32 +2175,38 @@
         .modal-content * {
             color: var(--text-primary);
         }
+
         .modal-content strong {
             color: var(--text-primary) !important;
         }
 
         /* ── Help modal heading override ────────────────────────── */
-        #helpModal h2, #helpModal h3 {
+        #helpModal h2,
+        #helpModal h3 {
             color: var(--text-primary) !important;
         }
+
         #helpModal hr {
             border-top-color: var(--border) !important;
         }
+
         /* Help modal top border */
         #helpModal .modal-content[style*="border-top:4px solid #4285f4"] {
             border-top-color: var(--accent) !important;
         }
 
         /* ── Chat bubble code blocks in responses ───────────────── */
-        .chat-bubble code, .chat-bubble pre {
+        .chat-bubble code,
+        .chat-bubble pre {
             background: var(--bg-page) !important;
             color: #a5d6ff !important;
         }
 
         /* ── Ensure data tables in JS-generated content are dark ── */
         thead tr[style*="background:#fff5f5"] {
-            background: rgba(239,68,68,0.1) !important;
+            background: rgba(239, 68, 68, 0.1) !important;
         }
+
         thead th[style*="color:#666"] {
             color: var(--text-secondary) !important;
         }
@@ -1935,12 +2228,12 @@
 
         /* ── Secret row red-tint ────────────────────────────────── */
         tr[style*="background:#fff5f5"] {
-            background: rgba(239,68,68,0.08) !important;
+            background: rgba(239, 68, 68, 0.08) !important;
         }
 
         /* ── Fira Code error snippets ───────────────────────────── */
         [style*="background:#fff5f5"][style*="font-family"] {
-            background: rgba(239,68,68,0.1) !important;
+            background: rgba(239, 68, 68, 0.1) !important;
             color: #f87171 !important;
         }
 
@@ -1960,7 +2253,7 @@
         /* ── _mdLite generated inline code everywhere ────────────── */
         code[style*="background:#f0f0f0"][style*="padding:1px"],
         code[style*="background:#f0f0f0"][style*="padding:2px"] {
-            background: rgba(99,102,241,0.15) !important;
+            background: rgba(99, 102, 241, 0.15) !important;
             color: #818cf8 !important;
         }
 
@@ -1970,24 +2263,29 @@
 
         /* ── Breakpoint 1: ≤1200px — Compact mode ────────────────── */
         @media (max-width: 1200px) {
+
             /* Main tab bar: allow wrapping to 2 rows */
-            .dashboard-container > div:first-child,
+            .dashboard-container>div:first-child,
             div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 20px"] {
                 flex-wrap: wrap !important;
             }
+
             /* Slightly smaller tab text */
             [id^="main-tab-"] {
                 padding: 8px 12px !important;
                 font-size: 12px !important;
             }
+
             /* Sub-tabs: allow horizontal scroll or wrap */
             .panel-tabs {
                 flex-wrap: wrap;
             }
+
             .tab-btn {
                 padding: 6px 12px;
                 font-size: 12px;
             }
+
             /* AI search bar: reduce side margins */
             #ask-ai-wrap {
                 margin: 0 15px !important;
@@ -1999,14 +2297,17 @@
             body {
                 margin: 10px !important;
             }
+
             /* Row 1 (Title Bar): shrink logo & title */
             div[style*="padding: 15px 20px"][style*="display: flex"][style*="align-items: center"][style*="gap: 15px"] {
                 padding: 10px 15px !important;
                 gap: 10px !important;
             }
+
             div[style*="padding: 15px 20px"] img[alt="GDC Logo"] {
                 height: 36px !important;
             }
+
             div[style*="padding: 15px 20px"] h1 {
                 font-size: 17px !important;
             }
@@ -2017,6 +2318,7 @@
                 gap: 10px !important;
                 padding: 10px 15px !important;
             }
+
             /* AI search bar: full width on its own row */
             #ask-ai-wrap {
                 flex: none !important;
@@ -2024,6 +2326,7 @@
                 order: 3 !important;
                 margin: 0 !important;
             }
+
             /* Pod status: allow it to wrap next to namespace selector */
             div[style*="text-align: right"][style*="background: #1e1f35"] {
                 flex: 1 !important;
@@ -2031,18 +2334,20 @@
             }
 
             /* Main tab bar: wrap buttons into 2 rows */
-            .dashboard-container > div:first-child,
+            .dashboard-container>div:first-child,
             div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 20px"] {
                 flex-wrap: wrap !important;
                 gap: 6px !important;
             }
+
             [id^="main-tab-"] {
                 padding: 7px 10px !important;
                 font-size: 12px !important;
             }
+
             /* AI Chat & Help buttons on tab bar: wrap to next row */
-            .dashboard-container > div:first-child > button[onclick*="toggleChatDrawer"],
-            .dashboard-container > div:first-child > button[onclick*="helpModal"] {
+            .dashboard-container>div:first-child>button[onclick*="toggleChatDrawer"],
+            .dashboard-container>div:first-child>button[onclick*="helpModal"] {
                 margin-left: 0 !important;
             }
 
@@ -2051,6 +2356,7 @@
                 flex-wrap: wrap;
                 gap: 4px;
             }
+
             .tab-btn {
                 padding: 5px 10px;
                 font-size: 11px;
@@ -2060,6 +2366,7 @@
             .dashboard-container {
                 flex-direction: column !important;
             }
+
             .panel {
                 width: 100% !important;
                 min-width: 0 !important;
@@ -2071,7 +2378,9 @@
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
             }
-            th, td {
+
+            th,
+            td {
                 padding: 8px 10px !important;
                 font-size: 12px !important;
             }
@@ -2087,6 +2396,7 @@
                 width: 100% !important;
                 right: -100% !important;
             }
+
             #chat-panel.open {
                 right: 0 !important;
             }
@@ -2103,19 +2413,23 @@
             body {
                 margin: 5px !important;
             }
+
             /* Title bar: stack logo and title */
             div[style*="padding: 15px 20px"][style*="display: flex"][style*="align-items: center"][style*="gap: 15px"] {
                 flex-wrap: wrap !important;
                 padding: 8px 10px !important;
             }
+
             div[style*="padding: 15px 20px"] img[alt="GDC Logo"] {
                 height: 30px !important;
             }
+
             div[style*="padding: 15px 20px"] h1 {
                 font-size: 15px !important;
                 flex: 1 !important;
                 min-width: 0 !important;
             }
+
             /* Theme toggle: compact */
             .theme-toggle {
                 padding: 4px 8px !important;
@@ -2136,6 +2450,7 @@
                 font-size: 11px !important;
                 flex: 0 0 auto !important;
             }
+
             /* Sub-tabs: horizontal scroll */
             .panel-tabs {
                 overflow-x: auto !important;
@@ -2143,12 +2458,14 @@
                 -webkit-overflow-scrolling: touch;
                 scrollbar-width: thin;
             }
+
             .tab-btn {
                 flex-shrink: 0;
             }
 
             /* Tables: compact */
-            th, td {
+            th,
+            td {
                 padding: 6px 8px !important;
                 font-size: 11px !important;
             }
@@ -2158,10 +2475,14 @@
                 padding: 4px 8px !important;
                 font-size: 11px !important;
             }
-            .health-badge, .job-status-badge, .heal-risk-badge {
+
+            .health-badge,
+            .job-status-badge,
+            .heal-risk-badge {
                 font-size: 10px !important;
                 padding: 2px 8px !important;
             }
+
             .health-score-ring {
                 width: 50px !important;
                 height: 50px !important;
@@ -2172,6 +2493,7 @@
             #ai-query-input {
                 font-size: 12px !important;
             }
+
             #ask-ai-outer {
                 border-radius: 18px !important;
             }
@@ -2191,7 +2513,6 @@
                 word-break: break-all;
             }
         }
-
     </style>
 
     <!-- xterm.js for terminal -->
@@ -2206,7 +2527,7 @@
         // real K8s API backend is available. Loading it via http would also
         // cause 'Unexpected token <' errors when the auth middleware
         // intercepts the request and returns the CIDP login page.
-        (function() {
+        (function () {
             if (window.location.protocol === 'file:') {
                 var s = document.createElement('script');
                 var dir = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
@@ -2229,7 +2550,9 @@
             style="background-color: var(--bg-surface); padding: 15px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); border-bottom: 1px solid var(--border);">
             <img src="/static/logo.png" alt="GDC Logo"
                 style="height: 50px; background: var(--bg-hover); border-radius: 6px; padding: 4px;">
-            <h1 style="margin: 0; font-size: 22px; color: var(--text-primary); font-weight: 600; letter-spacing: -0.3px; flex:1;">GDC Dashboard
+            <h1
+                style="margin: 0; font-size: 22px; color: var(--text-primary); font-weight: 600; letter-spacing: -0.3px; flex:1;">
+                GDC Dashboard
             </h1>
             <button id="theme-toggle-btn" class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
                 <span class="theme-icon">🌙</span>
@@ -2245,11 +2568,12 @@
                 style="display: flex; align-items: center; gap: 10px; background: var(--bg-elevated); padding: 8px 15px; border-radius: 6px; border: 1px solid var(--border);">
                 <label for="namespace-select"
                     style="font-size: 13px; font-weight: 500; color: #8b8fa3; margin: 0;">Namespace:</label>
-                <select id="namespace-select" onchange="fetchData(); if (typeof refreshAIHealthBanners==='function') refreshAIHealthBanners();"
+                <select id="namespace-select"
+                    onchange="fetchData(); if (typeof refreshAIHealthBanners==='function') refreshAIHealthBanners();"
                     style="padding: 2px 5px; font-size: 13px; border: none; outline: none; background: transparent; font-weight: 500; color: #e2e4e9;">
-                    <option value="dbsleuth-dev">GDC-DEV</option>
-                    <option value="dbsleuth-sit">GDC-SIT</option>
-                    <option value="dbsleuth">GDC-UAT</option>
+                    <option value="namespace-dev">GDC-DEV</option>
+                    <option value="namespace-sit">GDC-SIT</option>
+                    <option value="namespace">GDC-UAT</option>
                     <option value="preprod">Preprod</option>
                     <option value="prod">Prod</option>
                 </select>
@@ -2433,7 +2757,8 @@
     <div class="dashboard-container" style="display: block;">
 
         <!-- Top Level Tabs -->
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #2a2b45; padding-bottom: 0;">
+        <div
+            style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #2a2b45; padding-bottom: 0;">
             <button id="main-tab-workloads" class="btn btn-primary"
                 style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px;"
                 onclick="switchMainTab('workloads')">📦 Workloads</button>
@@ -2468,7 +2793,8 @@
                     <div id="pulse-grade-pill"
                         style="display:flex;align-items:center;justify-content:center;width:38px;height:28px;border-radius:14px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(135deg,#4a00e0,#6f42c1);flex-shrink:0;">
                         --</div>
-                    <div id="pulse-score-text" style="font-size:12px;font-weight:600;color:#e2e4e9;white-space:nowrap;">--
+                    <div id="pulse-score-text" style="font-size:12px;font-weight:600;color:#e2e4e9;white-space:nowrap;">
+                        --
                         / 100</div>
                     <div style="width:1px;height:16px;background:#e0e0e0;flex-shrink:0;"></div>
                     <div id="pulse-summary-text"
@@ -2501,7 +2827,8 @@
                     <div id="net-grade-pill"
                         style="display:flex;align-items:center;justify-content:center;width:38px;height:28px;border-radius:14px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(135deg,#4285f4,#0f9d58);flex-shrink:0;">
                         --</div>
-                    <div id="net-score-text" style="font-size:12px;font-weight:600;color:#e2e4e9;white-space:nowrap;">-- /
+                    <div id="net-score-text" style="font-size:12px;font-weight:600;color:#e2e4e9;white-space:nowrap;">--
+                        /
                         100</div>
                     <div style="width:1px;height:16px;background:#e0e0e0;flex-shrink:0;"></div>
                     <div id="net-summary-text"
@@ -2757,14 +3084,16 @@
                     style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;">
                     <span id="sec-count-medium">0</span> Medium
                 </div>
-                <div id="sec-pill-low" class="sec-pill" onclick="filterSecCategory('Low')" style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:#22c55e;">
+                <div id="sec-pill-low" class="sec-pill" onclick="filterSecCategory('Low')"
+                    style="background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:#22c55e;">
                     <span id="sec-count-low">0</span> Low
                 </div>
                 <div id="sec-pill-info" class="sec-pill" onclick="filterSecCategory('Info')"
                     style="background:rgba(139,143,163,0.12);border:1px solid rgba(139,143,163,0.3);color:#8b8fa3;">
                     <span id="sec-count-info">0</span> Info
                 </div>
-                <div class="sec-pill" onclick="filterSecCategory(null)" style="background:#1a1b2e;border:1px solid #2a2b45;color:#8b8fa3; margin-left:auto;">
+                <div class="sec-pill" onclick="filterSecCategory(null)"
+                    style="background:#1a1b2e;border:1px solid #2a2b45;color:#8b8fa3; margin-left:auto;">
                     Show All</div>
             </div>
 
@@ -4044,7 +4373,8 @@
                             <!-- Summary -->
                             <div id="env-ai-summary"
                                 style="font-size:13px; color:#e2e4e9; line-height:1.6;
-                            margin-bottom:14px; background:rgba(99,102,241,0.08); border:1px solid #2a2b45; border-radius:8px; padding:10px 12px;"></div>
+                            margin-bottom:14px; background:rgba(99,102,241,0.08); border:1px solid #2a2b45; border-radius:8px; padding:10px 12px;">
+                            </div>
                             <!-- Security Flags -->
                             <div id="env-ai-flags" style="margin-bottom:12px;"></div>
                             <!-- Two columns: recommendations + kubectl hints -->
@@ -4277,7 +4607,7 @@
                 }
 
                 .help-chip:hover {
-                    background: rgba(99,102,241,0.15);
+                    background: rgba(99, 102, 241, 0.15);
                     border-color: var(--accent, #6366f1);
                     color: var(--accent-hover, #818cf8);
                 }
@@ -4370,7 +4700,8 @@
 
             <div
                 style="margin-top:16px; padding:10px 14px; background:var(--bg-surface, #1a1b2e); border-radius:8px; font-size:12px; color:var(--text-secondary, #8b8fa3); border-left:3px solid var(--accent, #6366f1);">
-                <strong style="color:var(--text-primary, #e2e4e9);">Pro tip:</strong> AI knows all resources in your namespace — use resource names
+                <strong style="color:var(--text-primary, #e2e4e9);">Pro tip:</strong> AI knows all resources in your
+                namespace — use resource names
                 directly
                 e.g. "restart my-app" or "show YAML for checkout-service".
             </div>
@@ -7263,7 +7594,7 @@
             } else {
                 // User is IDLE (15+ min) — don't ping, let CIDP expire.
                 // When they return, the visibility change handler will detect and prompt.
-                console.log('[auth] User idle for ' + Math.round(idleMs/60000) + 'min — not pinging');
+                console.log('[auth] User idle for ' + Math.round(idleMs / 60000) + 'min — not pinging');
             }
         }, _PING_INTERVAL);
 
@@ -7515,7 +7846,7 @@
                 fetch('/api/ai/converse/reset', {
                     method: 'POST',
                     headers: { 'X-Session-Id': _chatSessionId }
-                }).catch(() => {});
+                }).catch(() => { });
             }
             _chatSessionId = null;
             const msgs = document.getElementById('chat-messages');
