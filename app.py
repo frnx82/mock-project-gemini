@@ -134,6 +134,11 @@ import re, time
 _ai_response_cache = {}
 _AI_CACHE_TTL = 300  # 5 minutes
 
+# In-flight lock per cache key: prevents concurrent Gemini calls when cache
+# expires and multiple requests arrive simultaneously (burst protection).
+_ai_inflight = {}    # key -> threading.Event
+_ai_inflight_lock = threading.Lock()
+
 def _cache_get(key):
     """Return cached data if fresh, else None."""
     entry = _ai_response_cache.get(key)
@@ -142,8 +147,29 @@ def _cache_get(key):
     return None
 
 def _cache_set(key, data):
-    """Store data in cache with current timestamp."""
+    """Store data in cache with current timestamp and release any waiters."""
     _ai_response_cache[key] = (time.time(), data)
+    # Release any threads waiting for this key
+    with _ai_inflight_lock:
+        _ai_inflight.pop(key, None)
+
+def _cache_acquire(key):
+    """Try to become the single caller for this cache key.
+
+    Returns True if this thread should make the Gemini call.
+    Returns False if another thread is already making the call
+    (caller should re-check cache after a brief wait).
+    """
+    with _ai_inflight_lock:
+        if key in _ai_inflight:
+            return False  # Another thread is already calling Gemini
+        _ai_inflight[key] = True
+        return True
+
+def _cache_release(key):
+    """Release the in-flight lock if the Gemini call fails (no cache set)."""
+    with _ai_inflight_lock:
+        _ai_inflight.pop(key, None)
 
 def parse_gemini_json(raw_text):
     """Robustly parse JSON from Gemini output, handling common malformations.
@@ -231,7 +257,8 @@ def gemini_generate_with_retry(prompt, max_retries=2):
             ])
             # Also retry on 429 / quota / rate-limit errors with longer backoff
             is_rate_limited = any(kw in err_str for kw in [
-                'resource exhausted', '429', 'quota', 'rate limit',
+                'resource exhausted', 'resource_exhausted',
+                '429', 'quota', 'rate limit', 'rate_limit',
                 'too many requests', 'resourceexhausted'
             ])
             if (is_transient or is_rate_limited) and attempt < max_retries:
@@ -5013,7 +5040,7 @@ def health_pulse():
         if not get_model():
             return jsonify(fallback_result)
 
-        # ── TTL cache: avoid re-querying Gemini on every 5s poll ──────
+        # ── TTL cache: avoid re-querying Gemini on every poll ──────────
         cache_key = ('health_pulse', namespace)
         cached = _cache_get(cache_key)
         if cached:
@@ -5022,38 +5049,49 @@ def health_pulse():
             cached['failing_count'] = len(failing)
             return jsonify(cached)
 
-        prompt = (
-            f'You are a Kubernetes SRE reviewing namespace "{namespace}".\n'
-            f'Workloads ({total} total):\n{wl_summary}\n'
-            f'Failing resources: {len(failing)}\n\n'
-            'Score the overall namespace health 0-100 and identify the top 3 actionable issues.\n'
-            'Return ONLY valid JSON (no markdown, no code fences):\n'
-            '{\n'
-            '  "score": <integer 0-100>,\n'
-            '  "grade": "<A|B|C|D>",\n'
-            '  "summary": "<1 sentence overall health summary>",\n'
-            '  "issues": [\n'
-            '    {\n'
-            '      "severity": "<critical|warning|info>",\n'
-            '      "resource": "<resource name>",\n'
-            '      "kind": "<Deployment|Pod|Secret|etc>",\n'
-            '      "issue": "<concise issue, use **bold** for key terms>",\n'
-            '      "action": "<single kubectl command>"\n'
-            '    }\n'
-            '  ]\n'
-            '}'
-        )
-        resp = gemini_generate_with_retry(prompt)
-        if not resp:
-            # Gemini returned None (429/quota exhausted) — use fallback
+        # In-flight guard: only one Gemini call at a time per cache key
+        if not _cache_acquire(cache_key):
+            # Another thread/worker is already calling Gemini — return fallback
             return jsonify(fallback_result)
-        d = parse_gemini_json(resp.text)
-        d['namespace'] = namespace
-        d['total_resources'] = total
-        d['failing_count'] = len(failing)
-        d['gemini_powered'] = True
-        _cache_set(cache_key, d)
-        return jsonify(d)
+
+        try:
+            prompt = (
+                f'You are a Kubernetes SRE reviewing namespace "{namespace}".\n'
+                f'Workloads ({total} total):\n{wl_summary}\n'
+                f'Failing resources: {len(failing)}\n\n'
+                'Score the overall namespace health 0-100 and identify the top 3 actionable issues.\n'
+                'Return ONLY valid JSON (no markdown, no code fences):\n'
+                '{\n'
+                '  "score": <integer 0-100>,\n'
+                '  "grade": "<A|B|C|D>",\n'
+                '  "summary": "<1 sentence overall health summary>",\n'
+                '  "issues": [\n'
+                '    {\n'
+                '      "severity": "<critical|warning|info>",\n'
+                '      "resource": "<resource name>",\n'
+                '      "kind": "<Deployment|Pod|Secret|etc>",\n'
+                '      "issue": "<concise issue, use **bold** for key terms>",\n'
+                '      "action": "<single kubectl command>"\n'
+                '    }\n'
+                '  ]\n'
+                '}'
+            )
+            resp = gemini_generate_with_retry(prompt)
+            if not resp:
+                # Gemini returned None (429/quota exhausted) — use fallback
+                _cache_release(cache_key)
+                return jsonify(fallback_result)
+            d = parse_gemini_json(resp.text)
+            d['namespace'] = namespace
+            d['total_resources'] = total
+            d['failing_count'] = len(failing)
+            d['gemini_powered'] = True
+            _cache_set(cache_key, d)
+            return jsonify(d)
+        except Exception as gemini_err:
+            _cache_release(cache_key)
+            app.logger.warning(f'[AI] health_pulse Gemini call failed: {gemini_err} — using fallback')
+            return jsonify(fallback_result)
 
     except Exception as e:
         app.logger.error(f'health_pulse error: {e}')
@@ -5584,7 +5622,7 @@ def network_health():
         if not get_model():
             return jsonify(fallback_result)
 
-        # ── TTL cache: avoid re-querying Gemini on every 5s poll ──────
+        # ── TTL cache: avoid re-querying Gemini on every poll ──────────
         cache_key = ('network_health', namespace)
         cached = _cache_get(cache_key)
         if cached:
@@ -5592,25 +5630,36 @@ def network_health():
             cached.update({'service_count': svc_count, 'vs_count': vs_count, 'lb_count': lb_count})
             return jsonify(cached)
 
-        context = '\n\n'.join(sections)
-        prompt = (
-            f'You are a Kubernetes/Istio SRE reviewing namespace "{namespace}" network health.\n'
-            f'{context}\n\nScore network health 0-100 and list top 3 issues.\n'
-            'Return ONLY valid JSON (no markdown):\n'
-            '{"score":<int>,"grade":"<A|B|C|D>","summary":"<1 sentence>","issues":['
-            '{"severity":"<critical|warning|info>","resource":"<name>","kind":"<Service|VS>","issue":"<text>","action":"<kubectl cmd>"}]}'
-        )
-        resp = gemini_generate_with_retry(prompt)
-        raw = resp.text if resp else ''
-        if not raw or not raw.strip():
-            # Gemini returned empty or None (429/quota) — use fallback
-            fallback_result['summary'] += ' (AI temporarily unavailable)'
+        # In-flight guard: only one Gemini call at a time per cache key
+        if not _cache_acquire(cache_key):
             return jsonify(fallback_result)
-        d = parse_gemini_json(raw)
-        d.update({'namespace': namespace, 'service_count': svc_count,
-                  'vs_count': vs_count, 'lb_count': lb_count, 'gemini_powered': True})
-        _cache_set(cache_key, d)
-        return jsonify(d)
+
+        try:
+            context = '\n\n'.join(sections)
+            prompt = (
+                f'You are a Kubernetes/Istio SRE reviewing namespace "{namespace}" network health.\n'
+                f'{context}\n\nScore network health 0-100 and list top 3 issues.\n'
+                'Return ONLY valid JSON (no markdown):\n'
+                '{"score":<int>,"grade":"<A|B|C|D>","summary":"<1 sentence>","issues":['
+                '{"severity":"<critical|warning|info>","resource":"<name>","kind":"<Service|VS>","issue":"<text>","action":"<kubectl cmd>"}]}'
+            )
+            resp = gemini_generate_with_retry(prompt)
+            raw = resp.text if resp else ''
+            if not raw or not raw.strip():
+                # Gemini returned empty or None (429/quota) — use fallback
+                _cache_release(cache_key)
+                fallback_result['summary'] += ' (AI temporarily unavailable)'
+                return jsonify(fallback_result)
+            d = parse_gemini_json(raw)
+            d.update({'namespace': namespace, 'service_count': svc_count,
+                      'vs_count': vs_count, 'lb_count': lb_count, 'gemini_powered': True})
+            _cache_set(cache_key, d)
+            return jsonify(d)
+        except Exception as gemini_err:
+            _cache_release(cache_key)
+            app.logger.warning(f'[AI] network_health Gemini call failed: {gemini_err} — using fallback')
+            return jsonify(fallback_result)
+
     except Exception as e:
         app.logger.error(f'network_health error: {e}')
         return jsonify({'score': 70, 'grade': 'C', 'namespace': 'unknown',
