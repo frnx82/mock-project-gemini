@@ -68,6 +68,28 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
+        # Liveness: ultra-lightweight — no K8s or Gemini calls.
+        # If this fails, the Flask worker is truly dead → restart pod.
+        livenessProbe:
+          httpGet:
+            path: /api/ping
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 4      # Allow 4 failures (60s) before killing
+          successThreshold: 1
+        # Readiness: lightweight health check — no Gemini calls.
+        # Keeps pod out of Service endpoints while starting up or overloaded.
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3      # 30s of failures → stop routing traffic
+          successThreshold: 1
         env:
         - name: POD_NAMESPACE
           valueFrom:

@@ -206,11 +206,11 @@ def parse_gemini_json(raw_text):
 
 
 def gemini_generate_with_retry(prompt, max_retries=2):
-    """Call Gemini with retry on transient SSL/connection errors.
+    """Call Gemini with retry on transient SSL/connection and 429 quota errors.
 
     GDC network environments often experience intermittent SSL EOF errors.
-    This wrapper retries on connection-level failures without retrying on
-    content/quota errors.
+    Vertex AI also returns 429 Resource Exhausted when quota is exceeded.
+    This wrapper retries on both with appropriate backoff.
     """
     model = get_model()
     if not model:
@@ -229,11 +229,31 @@ def gemini_generate_with_retry(prompt, max_retries=2):
                 'server disconnected', 'broken pipe',
                 'connection refused', 'timed out', 'timeout'
             ])
-            if is_transient and attempt < max_retries:
-                time.sleep(1.5 * (attempt + 1))  # Back-off: 1.5s, 3s
+            # Also retry on 429 / quota / rate-limit errors with longer backoff
+            is_rate_limited = any(kw in err_str for kw in [
+                'resource exhausted', '429', 'quota', 'rate limit',
+                'too many requests', 'resourceexhausted'
+            ])
+            if (is_transient or is_rate_limited) and attempt < max_retries:
+                # Longer backoff for rate-limits (3s, 6s) vs network errors (1.5s, 3s)
+                backoff = (3.0 if is_rate_limited else 1.5) * (attempt + 1)
+                app.logger.warning(
+                    f'[AI] Gemini retry {attempt+1}/{max_retries} '
+                    f'({"429/quota" if is_rate_limited else "transient"}) — '
+                    f'waiting {backoff}s'
+                )
+                time.sleep(backoff)
                 last_error = e
                 continue
-            raise  # Non-transient or final attempt — re-raise
+            # On final attempt for rate-limit errors, return None gracefully
+            # instead of crashing the request (the caller has a fallback)
+            if is_rate_limited:
+                app.logger.error(
+                    f'[AI] Gemini 429/quota exhausted after {max_retries+1} attempts. '
+                    f'Returning None — caller will use deterministic fallback.'
+                )
+                return None
+            raise  # Non-transient, non-quota — re-raise
     raise last_error
 
 
@@ -4981,15 +5001,26 @@ def health_pulse():
             'action': f'kubectl get deployments -n {namespace} -o wide'
         })
 
+        fallback_result = {
+            'score': score,
+            'grade': 'A' if score >= 90 else ('B' if score >= 75 else ('C' if score >= 60 else 'D')),
+            'namespace': namespace, 'total_resources': total,
+            'failing_count': len(failing), 'issues': fallback_issues[:3],
+            'summary': f'Namespace {namespace}: {total} resources, {len(failing)} failing.',
+            'gemini_powered': False
+        }
+
         if not get_model():
-            return jsonify({
-                'score': score,
-                'grade': 'A' if score >= 90 else ('B' if score >= 75 else ('C' if score >= 60 else 'D')),
-                'namespace': namespace, 'total_resources': total,
-                'failing_count': len(failing), 'issues': fallback_issues[:3],
-                'summary': f'Namespace {namespace}: {total} resources, {len(failing)} failing.',
-                'gemini_powered': False
-            })
+            return jsonify(fallback_result)
+
+        # ── TTL cache: avoid re-querying Gemini on every 5s poll ──────
+        cache_key = ('health_pulse', namespace)
+        cached = _cache_get(cache_key)
+        if cached:
+            # Update dynamic counts from latest workload snapshot
+            cached['total_resources'] = total
+            cached['failing_count'] = len(failing)
+            return jsonify(cached)
 
         prompt = (
             f'You are a Kubernetes SRE reviewing namespace "{namespace}".\n'
@@ -5013,11 +5044,15 @@ def health_pulse():
             '}'
         )
         resp = gemini_generate_with_retry(prompt)
+        if not resp:
+            # Gemini returned None (429/quota exhausted) — use fallback
+            return jsonify(fallback_result)
         d = parse_gemini_json(resp.text)
         d['namespace'] = namespace
         d['total_resources'] = total
         d['failing_count'] = len(failing)
         d['gemini_powered'] = True
+        _cache_set(cache_key, d)
         return jsonify(d)
 
     except Exception as e:
@@ -5538,14 +5573,24 @@ def network_health():
                              'issue': 'No VirtualServices — traffic management not configured.',
                              'action': f'kubectl get virtualservices -n {namespace}'}] if vs_count == 0 else []
 
+        fallback_result = {'score': score,
+                        'grade': 'A' if score >= 90 else ('B' if score >= 75 else 'C'),
+                        'namespace': namespace, 'service_count': svc_count,
+                        'vs_count': vs_count, 'lb_count': lb_count,
+                        'issues': fallback_issues,
+                        'summary': f'Namespace {namespace}: {svc_count} services, {vs_count} VirtualServices.',
+                        'gemini_powered': False}
+
         if not get_model():
-            return jsonify({'score': score,
-                            'grade': 'A' if score >= 90 else ('B' if score >= 75 else 'C'),
-                            'namespace': namespace, 'service_count': svc_count,
-                            'vs_count': vs_count, 'lb_count': lb_count,
-                            'issues': fallback_issues,
-                            'summary': f'Namespace {namespace}: {svc_count} services, {vs_count} VirtualServices.',
-                            'gemini_powered': False})
+            return jsonify(fallback_result)
+
+        # ── TTL cache: avoid re-querying Gemini on every 5s poll ──────
+        cache_key = ('network_health', namespace)
+        cached = _cache_get(cache_key)
+        if cached:
+            # Update dynamic counts from latest data
+            cached.update({'service_count': svc_count, 'vs_count': vs_count, 'lb_count': lb_count})
+            return jsonify(cached)
 
         context = '\n\n'.join(sections)
         prompt = (
@@ -5558,17 +5603,13 @@ def network_health():
         resp = gemini_generate_with_retry(prompt)
         raw = resp.text if resp else ''
         if not raw or not raw.strip():
-            # Gemini returned empty — fall back to deterministic result
-            return jsonify({'score': score,
-                            'grade': 'A' if score >= 90 else ('B' if score >= 75 else 'C'),
-                            'namespace': namespace, 'service_count': svc_count,
-                            'vs_count': vs_count, 'lb_count': lb_count,
-                            'issues': fallback_issues,
-                            'summary': f'Namespace {namespace}: {svc_count} services, {vs_count} VirtualServices. (AI temporarily unavailable)',
-                            'gemini_powered': False})
+            # Gemini returned empty or None (429/quota) — use fallback
+            fallback_result['summary'] += ' (AI temporarily unavailable)'
+            return jsonify(fallback_result)
         d = parse_gemini_json(raw)
         d.update({'namespace': namespace, 'service_count': svc_count,
                   'vs_count': vs_count, 'lb_count': lb_count, 'gemini_powered': True})
+        _cache_set(cache_key, d)
         return jsonify(d)
     except Exception as e:
         app.logger.error(f'network_health error: {e}')

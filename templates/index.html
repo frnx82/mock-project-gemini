@@ -1964,6 +1964,234 @@
             color: #818cf8 !important;
         }
 
+        /* =================================================================
+           RESPONSIVE DESIGN — Browser Resize / Min-Max Adjustments
+           ================================================================= */
+
+        /* ── Breakpoint 1: ≤1200px — Compact mode ────────────────── */
+        @media (max-width: 1200px) {
+            /* Main tab bar: allow wrapping to 2 rows */
+            .dashboard-container > div:first-child,
+            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 20px"] {
+                flex-wrap: wrap !important;
+            }
+            /* Slightly smaller tab text */
+            [id^="main-tab-"] {
+                padding: 8px 12px !important;
+                font-size: 12px !important;
+            }
+            /* Sub-tabs: allow horizontal scroll or wrap */
+            .panel-tabs {
+                flex-wrap: wrap;
+            }
+            .tab-btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            /* AI search bar: reduce side margins */
+            #ask-ai-wrap {
+                margin: 0 15px !important;
+            }
+        }
+
+        /* ── Breakpoint 2: ≤900px — Tablet / half-screen ─────────── */
+        @media (max-width: 900px) {
+            body {
+                margin: 10px !important;
+            }
+            /* Row 1 (Title Bar): shrink logo & title */
+            div[style*="padding: 15px 20px"][style*="display: flex"][style*="align-items: center"][style*="gap: 15px"] {
+                padding: 10px 15px !important;
+                gap: 10px !important;
+            }
+            div[style*="padding: 15px 20px"] img[alt="GDC Logo"] {
+                height: 36px !important;
+            }
+            div[style*="padding: 15px 20px"] h1 {
+                font-size: 17px !important;
+            }
+
+            /* Row 2 (Control Bar): wrap to 2 rows */
+            div[style*="display: flex"][style*="justify-content: space-between"][style*="padding: 12px 20px"] {
+                flex-wrap: wrap !important;
+                gap: 10px !important;
+                padding: 10px 15px !important;
+            }
+            /* AI search bar: full width on its own row */
+            #ask-ai-wrap {
+                flex: none !important;
+                width: 100% !important;
+                order: 3 !important;
+                margin: 0 !important;
+            }
+            /* Pod status: allow it to wrap next to namespace selector */
+            div[style*="text-align: right"][style*="background: #1e1f35"] {
+                flex: 1 !important;
+                min-width: 0 !important;
+            }
+
+            /* Main tab bar: wrap buttons into 2 rows */
+            .dashboard-container > div:first-child,
+            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 20px"] {
+                flex-wrap: wrap !important;
+                gap: 6px !important;
+            }
+            [id^="main-tab-"] {
+                padding: 7px 10px !important;
+                font-size: 12px !important;
+            }
+            /* AI Chat & Help buttons on tab bar: wrap to next row */
+            .dashboard-container > div:first-child > button[onclick*="toggleChatDrawer"],
+            .dashboard-container > div:first-child > button[onclick*="helpModal"] {
+                margin-left: 0 !important;
+            }
+
+            /* Panel tabs (workload/network sub-tabs): wrap */
+            .panel-tabs {
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .tab-btn {
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+
+            /* Dashboard panels: stack vertically */
+            .dashboard-container {
+                flex-direction: column !important;
+            }
+            .panel {
+                width: 100% !important;
+                min-width: 0 !important;
+            }
+
+            /* Tables: enable horizontal scroll */
+            .panel table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            th, td {
+                padding: 8px 10px !important;
+                font-size: 12px !important;
+            }
+
+            /* Modal: wider on smaller screens */
+            .modal-content {
+                width: 92% !important;
+                margin: 3% auto !important;
+            }
+
+            /* Chat drawer: full width */
+            #chat-panel {
+                width: 100% !important;
+                right: -100% !important;
+            }
+            #chat-panel.open {
+                right: 0 !important;
+            }
+
+            /* AI buttons: allow wrapping */
+            .ai-btn {
+                font-size: 11px !important;
+                padding: 2px 7px !important;
+            }
+        }
+
+        /* ── Breakpoint 3: ≤600px — Mobile / narrow window ───────── */
+        @media (max-width: 600px) {
+            body {
+                margin: 5px !important;
+            }
+            /* Title bar: stack logo and title */
+            div[style*="padding: 15px 20px"][style*="display: flex"][style*="align-items: center"][style*="gap: 15px"] {
+                flex-wrap: wrap !important;
+                padding: 8px 10px !important;
+            }
+            div[style*="padding: 15px 20px"] img[alt="GDC Logo"] {
+                height: 30px !important;
+            }
+            div[style*="padding: 15px 20px"] h1 {
+                font-size: 15px !important;
+                flex: 1 !important;
+                min-width: 0 !important;
+            }
+            /* Theme toggle: compact */
+            .theme-toggle {
+                padding: 4px 8px !important;
+                font-size: 11px !important;
+            }
+
+            /* Control bar: fully stacked */
+            div[style*="display: flex"][style*="justify-content: space-between"][style*="padding: 12px 20px"] {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 8px !important;
+                padding: 8px 10px !important;
+            }
+
+            /* Main tab bar: smaller wrapping buttons */
+            [id^="main-tab-"] {
+                padding: 6px 8px !important;
+                font-size: 11px !important;
+                flex: 0 0 auto !important;
+            }
+            /* Sub-tabs: horizontal scroll */
+            .panel-tabs {
+                overflow-x: auto !important;
+                flex-wrap: nowrap !important;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+            }
+            .tab-btn {
+                flex-shrink: 0;
+            }
+
+            /* Tables: compact */
+            th, td {
+                padding: 6px 8px !important;
+                font-size: 11px !important;
+            }
+
+            /* Buttons & badges */
+            .btn {
+                padding: 4px 8px !important;
+                font-size: 11px !important;
+            }
+            .health-badge, .job-status-badge, .heal-risk-badge {
+                font-size: 10px !important;
+                padding: 2px 8px !important;
+            }
+            .health-score-ring {
+                width: 50px !important;
+                height: 50px !important;
+                font-size: 16px !important;
+            }
+
+            /* AI search: smaller text */
+            #ai-query-input {
+                font-size: 12px !important;
+            }
+            #ask-ai-outer {
+                border-radius: 18px !important;
+            }
+
+            /* Modals: near full-screen */
+            .modal-content {
+                width: 96% !important;
+                margin: 2% auto !important;
+                padding: 12px !important;
+                max-height: 90vh !important;
+            }
+
+            /* Kubectl hints: allow wrapping */
+            .kubectl-hint {
+                flex-wrap: wrap !important;
+                font-size: 11px !important;
+                word-break: break-all;
+            }
+        }
+
     </style>
 
     <!-- xterm.js for terminal -->
@@ -2017,7 +2245,7 @@
                 style="display: flex; align-items: center; gap: 10px; background: var(--bg-elevated); padding: 8px 15px; border-radius: 6px; border: 1px solid var(--border);">
                 <label for="namespace-select"
                     style="font-size: 13px; font-weight: 500; color: #8b8fa3; margin: 0;">Namespace:</label>
-                <select id="namespace-select" onchange="fetchData()"
+                <select id="namespace-select" onchange="fetchData(); if (typeof refreshAIHealthBanners==='function') refreshAIHealthBanners();"
                     style="padding: 2px 5px; font-size: 13px; border: none; outline: none; background: transparent; font-weight: 500; color: #e2e4e9;">
                     <option value="dbsleuth-dev">GDC-DEV</option>
                     <option value="dbsleuth-sit">GDC-SIT</option>
@@ -2205,7 +2433,7 @@
     <div class="dashboard-container" style="display: block;">
 
         <!-- Top Level Tabs -->
-        <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #2a2b45; padding-bottom: 0;">
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #2a2b45; padding-bottom: 0;">
             <button id="main-tab-workloads" class="btn btn-primary"
                 style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px;"
                 onclick="switchMainTab('workloads')">📦 Workloads</button>
@@ -4642,10 +4870,10 @@
 
                 renderWorkloads(workloads);
                 window._wlData = workloads; // cache for AI handlers
-                loadHealthPulse(workloads);
                 renderNetworking(services, virtualServices);
                 window._netData = { services, virtualServices }; // cache for AI handlers
-                loadNetworkHealth(services, virtualServices);
+                // NOTE: loadHealthPulse and loadNetworkHealth are decoupled from
+                // the 5s poll to avoid hammering the Gemini API (see refreshAIHealthBanners).
                 updatePodStats(workloads);
 
                 timestampEl.innerText = `Last updated: ${new Date().toLocaleTimeString()}`;
@@ -7125,6 +7353,25 @@
         // Initial load and polling
         fetchData();
         refreshInterval = setInterval(fetchData, 5000);
+
+        // ── AI Health Banners: separate, slower polling cycle ─────────
+        // These call Gemini AI endpoints which are expensive (tokens/cost).
+        // Backend caches responses for 5 min, but we also reduce frontend
+        // polling to 60s to minimize network traffic and API pressure.
+        // On initial load, we wait 2s for fetchData() to populate window._wlData.
+        const _AI_HEALTH_POLL_INTERVAL = 60000; // 60 seconds
+
+        function refreshAIHealthBanners() {
+            const wl = window._wlData || [];
+            const net = window._netData || { services: [], virtualServices: [] };
+            loadHealthPulse(wl);
+            loadNetworkHealth(net.services, net.virtualServices);
+        }
+
+        // Initial AI banner load (slight delay so fetchData populates data first)
+        setTimeout(refreshAIHealthBanners, 2000);
+        // Slow poll for AI health banners (60s)
+        setInterval(refreshAIHealthBanners, _AI_HEALTH_POLL_INTERVAL);
 
 
     </script>
