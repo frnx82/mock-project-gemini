@@ -3449,6 +3449,69 @@ def _k8s_list_rolebindings(namespace: str) -> str:
         return f'Error listing RBAC bindings: {e}'
 
 
+def _k8s_list_service_accounts(namespace: str) -> str:
+    """List ServiceAccounts with automount token setting, secrets, and age."""
+    try:
+        v1 = client.CoreV1Api()
+        sas = v1.list_namespaced_service_account(namespace)
+        lines = ['ServiceAccount | AutomountToken | Secrets | Age']
+        lines.append('---------------|----------------|---------|----')
+        for sa in sas.items:
+            name = sa.metadata.name
+            automount = sa.automount_service_account_token
+            automount_str = 'true' if automount is None or automount else 'false'
+            secret_names = [s.name for s in (sa.secrets or [])]
+            secrets_str = ', '.join(secret_names) if secret_names else 'none'
+            age = sa.metadata.creation_timestamp or '?'
+            lines.append(f'{name} | {automount_str} | {secrets_str} | {age}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing service accounts: {e}'
+
+
+def _k8s_list_roles(namespace: str) -> str:
+    """List Roles and ClusterRoles with their permission rules."""
+    try:
+        rbac_v1 = client.RbacAuthorizationV1Api()
+        lines = []
+
+        # Namespace-scoped Roles
+        roles = rbac_v1.list_namespaced_role(namespace)
+        lines.append('=== Roles (namespace-scoped) ===')
+        lines.append('Role | APIGroups | Resources | Verbs')
+        lines.append('-----|-----------|-----------|------')
+        for role in roles.items:
+            for rule in (role.rules or []):
+                api_groups = ', '.join(rule.api_groups or ['""'])
+                resources = ', '.join(rule.resources or [])
+                verbs = ', '.join(rule.verbs or [])
+                lines.append(f'{role.metadata.name} | {api_groups} | {resources} | {verbs}')
+
+        # Cluster-scoped ClusterRoles (show relevant ones, limit to 15)
+        try:
+            cr_list = rbac_v1.list_cluster_role()
+            # Filter out system roles to reduce noise
+            user_crs = [cr for cr in cr_list.items
+                        if not cr.metadata.name.startswith('system:')]
+            if user_crs:
+                lines.append('')
+                lines.append('=== ClusterRoles (cluster-scoped, non-system) ===')
+                lines.append('ClusterRole | APIGroups | Resources | Verbs')
+                lines.append('------------|-----------|-----------|------')
+                for cr in user_crs[:15]:
+                    for rule in (cr.rules or []):
+                        api_groups = ', '.join(rule.api_groups or ['""'])
+                        resources = ', '.join(rule.resources or [])
+                        verbs = ', '.join(rule.verbs or [])
+                        lines.append(f'{cr.metadata.name} | {api_groups} | {resources} | {verbs}')
+        except Exception:
+            pass  # ClusterRole listing may require cluster-level perms
+
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing roles: {e}'
+
+
 def _k8s_list_hpa(namespace: str) -> str:
     """List Horizontal Pod Autoscalers with current/target metrics."""
     try:
@@ -3764,6 +3827,377 @@ def _k8s_exec_command(namespace: str, pod_name: str, command: str, container: st
         return f'❌ Exec failed on "{pod_name}": {e}'
 
 
+# ── NEW: Additional diagnostic tools ───────────────────────────────────────
+
+def _k8s_list_network_policies(namespace: str) -> str:
+    """List NetworkPolicies with ingress/egress rules summary."""
+    try:
+        net_v1 = client.NetworkingV1Api()
+        nps = net_v1.list_namespaced_network_policy(namespace)
+        if not nps.items:
+            return f"No NetworkPolicies found in namespace '{namespace}'. All traffic is allowed by default."
+        lines = ['NetworkPolicy | Pod Selector | Ingress Rules | Egress Rules']
+        lines.append('--------------|--------------|---------------|-------------')
+        for np in nps.items:
+            name = np.metadata.name
+            pod_sel = ', '.join(
+                f'{k}={v}' for k, v in (np.spec.pod_selector.match_labels or {}).items()
+            ) if np.spec.pod_selector and np.spec.pod_selector.match_labels else '(all pods)'
+            ingress_count = len(np.spec.ingress or []) if np.spec.ingress else 'none'
+            egress_count = len(np.spec.egress or []) if np.spec.egress else 'none'
+            lines.append(f'{name} | {pod_sel} | {ingress_count} | {egress_count}')
+
+            # Detail ingress rules
+            for i, ing in enumerate(np.spec.ingress or []):
+                from_sources = []
+                for fr in (ing._from or []):
+                    if fr.pod_selector:
+                        labels = fr.pod_selector.match_labels or {}
+                        from_sources.append(f'pods({",".join(f"{k}={v}" for k,v in labels.items())})')
+                    if fr.namespace_selector:
+                        labels = fr.namespace_selector.match_labels or {}
+                        from_sources.append(f'ns({",".join(f"{k}={v}" for k,v in labels.items())})')
+                    if fr.ip_block:
+                        from_sources.append(f'cidr({fr.ip_block.cidr})')
+                ports_str = ', '.join(f'{p.port}/{p.protocol}' for p in (ing.ports or []))
+                lines.append(f'  ingress[{i}]: from=[{", ".join(from_sources) or "any"}] ports=[{ports_str or "all"}]')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing network policies: {e}'
+
+
+def _k8s_list_ingresses(namespace: str) -> str:
+    """List Ingress resources with hosts, paths, TLS, and backends."""
+    try:
+        net_v1 = client.NetworkingV1Api()
+        ings = net_v1.list_namespaced_ingress(namespace)
+        if not ings.items:
+            return f"No Ingress resources found in namespace '{namespace}'."
+        lines = ['Ingress | Class | Hosts | TLS | Rules']
+        lines.append('--------|-------|-------|-----|------')
+        for ing in ings.items:
+            name = ing.metadata.name
+            ing_class = ing.spec.ingress_class_name or 'default'
+            tls_hosts = []
+            for t in (ing.spec.tls or []):
+                tls_hosts.extend(t.hosts or [])
+            tls_str = ', '.join(tls_hosts) if tls_hosts else 'none'
+            hosts = set()
+            rule_details = []
+            for rule in (ing.spec.rules or []):
+                host = rule.host or '*'
+                hosts.add(host)
+                for path in (rule.http.paths if rule.http else []):
+                    backend = ''
+                    if path.backend.service:
+                        svc = path.backend.service
+                        port = svc.port.number if svc.port else '?'
+                        backend = f'{svc.name}:{port}'
+                    rule_details.append(f'{host}{path.path or "/"} -> {backend}')
+            hosts_str = ', '.join(hosts)
+            lines.append(f'{name} | {ing_class} | {hosts_str} | {tls_str} | {len(rule_details)} rules')
+            for rd in rule_details:
+                lines.append(f'  {rd}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing ingresses: {e}'
+
+
+def _k8s_list_resource_quotas(namespace: str) -> str:
+    """List ResourceQuotas with used vs hard limits."""
+    try:
+        v1 = client.CoreV1Api()
+        quotas = v1.list_namespaced_resource_quota(namespace)
+        if not quotas.items:
+            return f"No ResourceQuotas found in namespace '{namespace}'."
+        lines = ['ResourceQuota | Resource | Used | Hard | % Used']
+        lines.append('--------------|----------|------|------|-------')
+        for q in quotas.items:
+            used = q.status.used or {}
+            hard = q.status.hard or {}
+            for res in sorted(hard.keys()):
+                u = used.get(res, '0')
+                h = hard[res]
+                # Try to compute percentage
+                try:
+                    u_val = int(u) if u.isdigit() else float(u.replace('m','').replace('Mi','').replace('Gi',''))
+                    h_val = int(h) if h.isdigit() else float(h.replace('m','').replace('Mi','').replace('Gi',''))
+                    pct = f'{int(u_val/h_val*100)}%' if h_val > 0 else '?'
+                except Exception:
+                    pct = '-'
+                lines.append(f'{q.metadata.name} | {res} | {u} | {h} | {pct}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing resource quotas: {e}'
+
+
+def _k8s_list_destination_rules(namespace: str) -> str:
+    """List Istio DestinationRules with traffic policy, mTLS, and subsets."""
+    try:
+        custom = client.CustomObjectsApi()
+        drs = custom.list_namespaced_custom_object(
+            group='networking.istio.io', version='v1beta1',
+            namespace=namespace, plural='destinationrules'
+        )
+        items = drs.get('items', [])
+        if not items:
+            return f"No DestinationRules found in namespace '{namespace}'."
+        lines = ['DestinationRule | Host | mTLS Mode | LB Policy | Subsets']
+        lines.append('----------------|------|-----------|-----------|--------')
+        for dr in items:
+            name = dr['metadata']['name']
+            host = dr.get('spec', {}).get('host', '?')
+            tp = dr.get('spec', {}).get('trafficPolicy', {})
+            # mTLS mode
+            tls = tp.get('tls', {})
+            mtls_mode = tls.get('mode', 'not set')
+            # Load balancer
+            lb = tp.get('loadBalancer', {})
+            lb_policy = lb.get('simple', 'not set') if isinstance(lb, dict) else str(lb)
+            # Subsets
+            subsets = dr.get('spec', {}).get('subsets', [])
+            subset_names = ', '.join(s.get('name', '?') for s in subsets) if subsets else 'none'
+            lines.append(f'{name} | {host} | {mtls_mode} | {lb_policy} | {subset_names}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing destination rules: {e}'
+
+
+def _k8s_list_gateways(namespace: str) -> str:
+    """List Istio Gateways with servers, ports, and TLS settings."""
+    try:
+        custom = client.CustomObjectsApi()
+        gws = custom.list_namespaced_custom_object(
+            group='networking.istio.io', version='v1beta1',
+            namespace=namespace, plural='gateways'
+        )
+        items = gws.get('items', [])
+        if not items:
+            return f"No Istio Gateways found in namespace '{namespace}'."
+        lines = ['Gateway | Selector | Servers']
+        lines.append('--------|----------|--------')
+        for gw in items:
+            name = gw['metadata']['name']
+            selector = gw.get('spec', {}).get('selector', {})
+            sel_str = ', '.join(f'{k}={v}' for k, v in selector.items()) or 'default'
+            servers = gw.get('spec', {}).get('servers', [])
+            lines.append(f'{name} | {sel_str} | {len(servers)} server(s)')
+            for s in servers:
+                port = s.get('port', {})
+                port_str = f"{port.get('number','?')}/{port.get('protocol','?')} ({port.get('name','unnamed')})"
+                hosts = ', '.join(s.get('hosts', ['*']))
+                tls = s.get('tls', {})
+                tls_mode = tls.get('mode', 'none') if tls else 'none'
+                lines.append(f'  port={port_str} hosts=[{hosts}] tls={tls_mode}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing gateways: {e}'
+
+
+def _k8s_list_peer_authentications(namespace: str) -> str:
+    """List Istio PeerAuthentication policies (mTLS enforcement)."""
+    try:
+        custom = client.CustomObjectsApi()
+        pas = custom.list_namespaced_custom_object(
+            group='security.istio.io', version='v1beta1',
+            namespace=namespace, plural='peerauthentications'
+        )
+        items = pas.get('items', [])
+        if not items:
+            return f"No PeerAuthentication policies found in namespace '{namespace}'. Default mTLS behavior applies."
+        lines = ['PeerAuthentication | Target | mTLS Mode | Port-Level Overrides']
+        lines.append('-------------------|--------|-----------|--------------------')
+        for pa in items:
+            name = pa['metadata']['name']
+            selector = pa.get('spec', {}).get('selector', {})
+            target_labels = selector.get('matchLabels', {})
+            target = ', '.join(f'{k}={v}' for k, v in target_labels.items()) if target_labels else '(namespace-wide)'
+            mtls = pa.get('spec', {}).get('mtls', {})
+            mode = mtls.get('mode', 'UNSET')
+            port_mtls = pa.get('spec', {}).get('portLevelMtls', {})
+            port_overrides = ', '.join(f'port {p}: {v.get("mode","?")}' for p, v in port_mtls.items()) if port_mtls else 'none'
+            lines.append(f'{name} | {target} | {mode} | {port_overrides}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing peer authentications: {e}'
+
+
+def _k8s_get_rollout_history(namespace: str, deployment_name: str) -> str:
+    """Get rollout history for a Deployment showing revision numbers and change cause."""
+    try:
+        apps_v1 = client.AppsV1Api()
+        # Get the deployment
+        dep = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        # Get all ReplicaSets owned by this deployment
+        rs_list = apps_v1.list_namespaced_replica_set(namespace)
+        owned_rs = []
+        for rs in rs_list.items:
+            for ref in (rs.metadata.owner_references or []):
+                if ref.kind == 'Deployment' and ref.name == deployment_name:
+                    owned_rs.append(rs)
+                    break
+
+        if not owned_rs:
+            return f"No rollout history found for deployment '{deployment_name}'."
+
+        # Sort by revision annotation
+        def get_revision(rs):
+            return int(rs.metadata.annotations.get('deployment.kubernetes.io/revision', '0'))
+
+        owned_rs.sort(key=get_revision)
+
+        lines = [f'=== Rollout History: {deployment_name} ===']
+        lines.append('Revision | Image | Change Cause | Created')
+        lines.append('---------|-------|--------------|--------')
+        for rs in owned_rs:
+            rev = get_revision(rs)
+            annots = rs.metadata.annotations or {}
+            cause = annots.get('kubernetes.io/change-cause', 'not recorded')
+            image = rs.spec.template.spec.containers[0].image if rs.spec.template.spec.containers else '?'
+            created = rs.metadata.creation_timestamp or '?'
+            active = ' (current)' if rs.status.replicas and rs.status.replicas > 0 else ''
+            lines.append(f'{rev}{active} | {image} | {cause} | {created}')
+
+        # Current status
+        lines.append(f'\nCurrent: revision {get_revision(owned_rs[-1])}, {dep.status.ready_replicas or 0}/{dep.spec.replicas} replicas ready')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error getting rollout history: {e}'
+
+
+def _k8s_compare_pod_vs_limits(namespace: str) -> str:
+    """Compare actual CPU/memory usage vs requests/limits for all pods."""
+    try:
+        v1 = client.CoreV1Api()
+        custom = client.CustomObjectsApi()
+
+        # Get pod specs (requests/limits)
+        pods = v1.list_namespaced_pod(namespace).items
+
+        # Get actual usage from metrics API
+        try:
+            metrics = custom.list_namespaced_custom_object(
+                group='metrics.k8s.io', version='v1beta1',
+                namespace=namespace, plural='pods'
+            )
+            usage_map = {}
+            for m in metrics.get('items', []):
+                pod_name = m['metadata']['name']
+                for c in m.get('containers', []):
+                    key = f"{pod_name}/{c['name']}"
+                    usage_map[key] = {
+                        'cpu': c.get('usage', {}).get('cpu', '0'),
+                        'memory': c.get('usage', {}).get('memory', '0')
+                    }
+        except Exception:
+            usage_map = {}
+
+        lines = ['Pod/Container | CPU Used | CPU Req | CPU Limit | Mem Used | Mem Req | Mem Limit | Status']
+        lines.append('--------------|----------|---------|-----------|----------|---------|-----------|-------')
+        for pod in pods:
+            for c_spec in (pod.spec.containers or []):
+                key = f"{pod.metadata.name}/{c_spec.name}"
+                res = c_spec.resources or client.V1ResourceRequirements()
+                req = res.requests or {}
+                lim = res.limits or {}
+                usage = usage_map.get(key, {})
+                cpu_used = usage.get('cpu', '?')
+                mem_used = usage.get('memory', '?')
+                cpu_req = req.get('cpu', 'none')
+                cpu_lim = lim.get('cpu', 'none')
+                mem_req = req.get('memory', 'none')
+                mem_lim = lim.get('memory', 'none')
+                # Flag issues
+                status = '✅'
+                if cpu_req == 'none' and cpu_lim == 'none':
+                    status = '⚠️ no limits'
+                elif mem_lim == 'none':
+                    status = '⚠️ no mem limit'
+                lines.append(f'{key} | {cpu_used} | {cpu_req} | {cpu_lim} | {mem_used} | {mem_req} | {mem_lim} | {status}')
+        return '\n'.join(lines) if len(lines) > 2 else f'No pods found in namespace {namespace}.'
+    except Exception as e:
+        return f'Error comparing pod resources: {e}'
+
+
+def _k8s_dns_check(namespace: str, pod_name: str, hostname: str) -> str:
+    """Run nslookup inside a pod to debug DNS resolution issues."""
+    try:
+        from kubernetes.stream import stream
+        v1 = client.CoreV1Api()
+
+        # Try nslookup first, fall back to getent
+        for cmd in [f'nslookup {hostname}', f'getent hosts {hostname}', f'cat /etc/resolv.conf']:
+            try:
+                result = stream(
+                    v1.connect_get_namespaced_pod_exec,
+                    name=pod_name, namespace=namespace,
+                    command=['/bin/sh', '-c', cmd],
+                    stderr=True, stdin=False, stdout=True, tty=False,
+                    _request_timeout=10
+                )
+                if result and result.strip():
+                    return f'🔍 **DNS check** for `{hostname}` from `{pod_name}`:\n```\n$ {cmd}\n{result}\n```'
+            except Exception:
+                continue
+        return f'❌ DNS check failed — could not resolve `{hostname}` from pod `{pod_name}`. DNS tools (nslookup, getent) may not be available in the container.'
+    except Exception as e:
+        return f'Error running DNS check: {e}'
+
+
+def _k8s_list_limit_ranges(namespace: str) -> str:
+    """List LimitRanges showing default requests/limits applied to new containers."""
+    try:
+        v1 = client.CoreV1Api()
+        lrs = v1.list_namespaced_limit_range(namespace)
+        if not lrs.items:
+            return f"No LimitRanges found in namespace '{namespace}'. New pods get no automatic resource defaults."
+        lines = ['LimitRange | Type | Resource | Default | Default Request | Min | Max']
+        lines.append('-----------|------|----------|---------|----------------|-----|----')
+        for lr in lrs.items:
+            for limit in (lr.spec.limits or []):
+                ltype = limit.type  # Container, Pod, PVC
+                defaults = limit.default or {}
+                default_req = limit.default_request or {}
+                mins = limit.min or {}
+                maxs = limit.max or {}
+                resources = set(list(defaults.keys()) + list(default_req.keys()) + list(mins.keys()) + list(maxs.keys()))
+                for res in sorted(resources):
+                    lines.append(
+                        f'{lr.metadata.name} | {ltype} | {res} | '
+                        f'{defaults.get(res, "-")} | {default_req.get(res, "-")} | '
+                        f'{mins.get(res, "-")} | {maxs.get(res, "-")}'
+                    )
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing limit ranges: {e}'
+
+
+def _k8s_list_pdbs(namespace: str) -> str:
+    """List PodDisruptionBudgets with min available, max unavailable, and disruptions allowed."""
+    try:
+        policy_v1 = client.PolicyV1Api()
+        pdbs = policy_v1.list_namespaced_pod_disruption_budget(namespace)
+        if not pdbs.items:
+            return f"No PodDisruptionBudgets found in namespace '{namespace}'. Pods have no disruption protection."
+        lines = ['PDB | Selector | MinAvailable | MaxUnavailable | Current | Desired | Disruptions Allowed']
+        lines.append('----|----------|-------------|----------------|---------|---------|--------------------')
+        for pdb in pdbs.items:
+            name = pdb.metadata.name
+            selector = ', '.join(
+                f'{k}={v}' for k, v in (pdb.spec.selector.match_labels or {}).items()
+            ) if pdb.spec.selector and pdb.spec.selector.match_labels else '?'
+            min_avail = pdb.spec.min_available if pdb.spec.min_available is not None else '-'
+            max_unavail = pdb.spec.max_unavailable if pdb.spec.max_unavailable is not None else '-'
+            current = pdb.status.current_healthy if pdb.status else '?'
+            desired = pdb.status.desired_healthy if pdb.status else '?'
+            allowed = pdb.status.disruptions_allowed if pdb.status else '?'
+            lines.append(f'{name} | {selector} | {min_avail} | {max_unavail} | {current} | {desired} | {allowed}')
+        return '\n'.join(lines)
+    except Exception as e:
+        return f'Error listing PDBs: {e}'
+
+
 # ── Gemini Tool Declarations ───────────────────────────────────────────────
 
 if _genai_types:
@@ -3873,6 +4307,18 @@ if _genai_types:
                                 required=['namespace'])
         ),
         _genai_types.FunctionDeclaration(
+            name='k8s_list_service_accounts',
+            description='List ServiceAccounts with automount token setting, associated secrets, and age. Use to audit SA security, check automountServiceAccountToken, or investigate identity/auth issues.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_roles',
+            description='List Roles and ClusterRoles with their permission rules (apiGroups, resources, verbs). Use to audit RBAC permissions, check for overly broad access, or diagnose 403 Forbidden errors.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
             name='k8s_list_hpa',
             description='List Horizontal Pod Autoscalers with min/max replicas, current/desired counts, and scaling targets.',
             parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
@@ -3901,6 +4347,78 @@ if _genai_types:
             description='Get a comprehensive namespace health overview: pod counts by phase, deployment health, service count, resource quotas, and warning event count.',
             parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
                                 required=['namespace'])
+        ),
+        # ── Networking & Security tools ─────────────────────────────────────
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_network_policies',
+            description='List NetworkPolicies with pod selectors, ingress/egress rules. Use to diagnose connectivity issues (why can pod A not reach pod B?), audit network segmentation.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_ingresses',
+            description='List Ingress resources with hosts, paths, TLS, backends. Use to troubleshoot external traffic routing, check TLS certificates, or verify backend service bindings.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_resource_quotas',
+            description='List ResourceQuotas with used vs hard limits and percentage utilization. Use to diagnose quota exceeded errors or capacity planning.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_limit_ranges',
+            description='List LimitRanges showing default requests/limits applied automatically to new containers. Use to understand why pods get default resource limits.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_pdbs',
+            description='List PodDisruptionBudgets with min available, max unavailable, and disruptions allowed. Use to check if pods are protected during node drains or upgrades.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        # ── Istio / Service Mesh tools ─────────────────────────────────────
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_destination_rules',
+            description='List Istio DestinationRules with traffic policy, mTLS mode, load balancer policy, and subsets. Use to check mTLS settings, circuit breakers, or canary traffic splitting.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_gateways',
+            description='List Istio Gateways with servers, ports, hosts, and TLS settings. Use to troubleshoot ingress gateway configuration or external traffic entry points.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_list_peer_authentications',
+            description='List Istio PeerAuthentication policies showing mTLS enforcement mode (STRICT, PERMISSIVE, DISABLE). Use to audit which services enforce mutual TLS.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        # ── Diagnostics tools ──────────────────────────────────────────────
+        _genai_types.FunctionDeclaration(
+            name='k8s_get_rollout_history',
+            description='Get rollout/revision history for a Deployment. Shows revision numbers, images, change cause, and timestamps. Use before rollback decisions.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'deployment_name': ('STRING', 'Name of the Deployment')},
+                                required=['namespace', 'deployment_name'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_compare_pod_vs_limits',
+            description='Compare actual CPU/memory usage vs configured requests/limits for all pods. Flags pods with no limits set. Use for right-sizing, capacity planning, or OOM troubleshooting.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace')},
+                                required=['namespace'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='k8s_dns_check',
+            description='Run DNS lookup (nslookup) inside a pod to test if it can resolve a hostname. Use to debug service-to-service connectivity, DNS failures, or CoreDNS issues.',
+            parameters=_schema({'namespace': ('STRING', 'Kubernetes namespace'),
+                                 'pod_name': ('STRING', 'Pod to run the DNS check from'),
+                                 'hostname': ('STRING', 'Hostname or service name to resolve, e.g. database-svc, api-gateway.default.svc.cluster.local')},
+                                required=['namespace', 'pod_name', 'hostname'])
         ),
         # ── ACTION tools (write operations) ────────────────────────────────
         _genai_types.FunctionDeclaration(
@@ -3961,11 +4479,25 @@ if _genai_types:
         'k8s_list_pvcs':             lambda a: _k8s_list_pvcs(**a),
         'k8s_list_secrets':          lambda a: _k8s_list_secrets(**a),
         'k8s_list_rolebindings':     lambda a: _k8s_list_rolebindings(**a),
+        'k8s_list_service_accounts': lambda a: _k8s_list_service_accounts(**a),
+        'k8s_list_roles':            lambda a: _k8s_list_roles(**a),
         'k8s_list_hpa':              lambda a: _k8s_list_hpa(**a),
         'k8s_list_jobs':             lambda a: _k8s_list_jobs(**a),
         'k8s_list_nodes':            lambda a: _k8s_list_nodes(),
         'k8s_check_endpoints':       lambda a: _k8s_check_endpoints(**a),
         'k8s_namespace_summary':     lambda a: _k8s_namespace_summary(**a),
+        # NEW: networking, Istio, diagnostics tools
+        'k8s_list_network_policies':     lambda a: _k8s_list_network_policies(**a),
+        'k8s_list_ingresses':            lambda a: _k8s_list_ingresses(**a),
+        'k8s_list_resource_quotas':      lambda a: _k8s_list_resource_quotas(**a),
+        'k8s_list_limit_ranges':         lambda a: _k8s_list_limit_ranges(**a),
+        'k8s_list_pdbs':                 lambda a: _k8s_list_pdbs(**a),
+        'k8s_list_destination_rules':    lambda a: _k8s_list_destination_rules(**a),
+        'k8s_list_gateways':             lambda a: _k8s_list_gateways(**a),
+        'k8s_list_peer_authentications': lambda a: _k8s_list_peer_authentications(**a),
+        'k8s_get_rollout_history':       lambda a: _k8s_get_rollout_history(**a),
+        'k8s_compare_pod_vs_limits':     lambda a: _k8s_compare_pod_vs_limits(**a),
+        'k8s_dns_check':                 lambda a: _k8s_dns_check(**a),
         # ACTION tools
         'k8s_scale_deployment':      lambda a: _k8s_scale_deployment(**a),
         'k8s_restart_deployment':    lambda a: _k8s_restart_deployment(**a),

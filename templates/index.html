@@ -1623,6 +1623,16 @@
             background: var(--bg-elevated) !important;
         }
 
+        /* Secret modal — force dark-mode table value cells */
+        #secretModal #secret-table-body td {
+            background: var(--bg-surface) !important;
+            color: var(--text-primary) !important;
+        }
+        #secretModal #secret-table-body td:first-child {
+            background: transparent !important;
+            color: var(--accent) !important;
+        }
+
         /* Optimizer help modal */
         #optimizerHelpModal .modal-content {
             background: var(--bg-elevated) !important;
@@ -6678,8 +6688,8 @@
                         Object.keys(data.data).forEach(key => {
                             tbody.innerHTML += `
                                         <tr>
-                                            <td style="font-weight:bold; color:#0056b3;">${key}</td>
-                                            <td style="font-family:monospace; background:#f8f8f8;">${data.data[key]}</td>
+                                            <td style="font-weight:bold; color:var(--accent, #0056b3);">${key}</td>
+                                            <td style="font-family:monospace; background:var(--bg-surface, #f8f8f8); color:var(--text-primary, #333);">${data.data[key]}</td>
                                         </tr>`;
                         });
                     }
