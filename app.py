@@ -1060,6 +1060,18 @@ def ai_optimize():
     if cached:
         return jsonify(cached)
 
+    # ── In-flight dedup — if another request is already computing, wait for it ──
+    if not _cache_acquire(cache_key):
+        # Another worker is already running the optimizer — wait up to 120s
+        for _wait in range(24):
+            time.sleep(5)
+            cached = _cache_get(cache_key)
+            if cached:
+                return jsonify(cached)
+        return jsonify({'error': 'Optimizer is still computing. Please try again in a moment.', 'recommendations': []}), 202
+
+    _optimizer_start = time.time()
+
     cost_per_core = 60.0  # EUR per core per month (org-specific)
 
     # ── Utility: CPU / Memory parsers ────────────────────────────────────────
@@ -1141,18 +1153,27 @@ def ai_optimize():
         if pod_metrics_map:
             try:
                 all_pods = core_v1.list_namespaced_pod(namespace).items
+
+                # Pre-fetch ALL ReplicaSets in one call instead of per-pod lookups
+                # (eliminates N API calls — was the main bottleneck for large namespaces)
+                rs_to_deployment = {}  # {rs_name: deployment_name}
+                try:
+                    all_rs = apps_v1.list_namespaced_replica_set(namespace).items
+                    for rs in all_rs:
+                        for rs_ref in (rs.metadata.owner_references or []):
+                            if rs_ref.kind == "Deployment":
+                                rs_to_deployment[rs.metadata.name] = rs_ref.name
+                                break
+                    print(f"[optimize] pre-fetched {len(all_rs)} ReplicaSets → {len(rs_to_deployment)} deployment mappings")
+                except Exception as rs_err:
+                    print(f"[optimize] ReplicaSet batch fetch failed: {rs_err}")
+
                 for pod in all_pods:
                     owner_name = None
                     for ref in (pod.metadata.owner_references or []):
                         if ref.kind == "ReplicaSet":
-                            try:
-                                rs = apps_v1.read_namespaced_replica_set(ref.name, namespace)
-                                for rs_ref in (rs.metadata.owner_references or []):
-                                    if rs_ref.kind == "Deployment":
-                                        owner_name = rs_ref.name
-                                        break
-                            except Exception:
-                                pass
+                            # Fast lookup from pre-fetched map (no API call!)
+                            owner_name = rs_to_deployment.get(ref.name)
                         elif ref.kind in ("StatefulSet", "DaemonSet"):
                             owner_name = ref.name
                         if owner_name:
@@ -1260,129 +1281,35 @@ def ai_optimize():
             })
 
         inventory_text = "\n\n".join(workload_summaries)
+        print(f"[optimize] ⏱  K8s data collection: {time.time() - _optimizer_start:.1f}s | "
+              f"{len(raw_workloads)} workloads, {len(pod_metrics_map)} pod metrics, "
+              f"inventory={len(inventory_text)} chars")
 
-        # ── 4. Basic spec-check fallback when Gemini is NOT configured ────────
-        if not get_model():
-            recommendations   = []
-            total_current     = 0.0
-            total_recommended = 0.0
+        # Cap workloads to prevent massive Gemini prompts (>25 workloads = truncated response)
+        MAX_WORKLOADS_FOR_AI = 25
+        if len(workload_summaries) > MAX_WORKLOADS_FOR_AI:
+            print(f"[optimize] ⚠️  Capping workloads from {len(workload_summaries)} to {MAX_WORKLOADS_FOR_AI} for AI analysis")
+            workload_summaries = workload_summaries[:MAX_WORKLOADS_FOR_AI]
+            raw_workloads = raw_workloads[:MAX_WORKLOADS_FOR_AI]
+            inventory_text = "\n\n".join(workload_summaries)
 
-            for kind, name, replicas, containers in raw_workloads:
-                total_req_cpu     = 0.0
-                total_lim_cpu     = 0.0
-                total_lim_mem_mib = 0.0
-                for c in containers:
-                    res = getattr(c, 'resources', None)
-                    req = getattr(res, 'requests', None) or {}
-                    lim = getattr(res, 'limits',   None) or {}
-                    total_req_cpu     += _parse_cpu_cores(req.get('cpu'))
-                    total_lim_cpu     += _parse_cpu_cores(lim.get('cpu'))
-                    total_lim_mem_mib += _parse_mem_mib(lim.get('memory'))
+        # Truncate inventory to prevent token overflow (12K chars ≈ 4K tokens)
+        if len(inventory_text) > 12000:
+            inventory_text = inventory_text[:12000] + "\n\n[... truncated — too many workloads ...]"
 
-                wm = workload_metrics_map.get(name)
-                actual_cpu_per_replica = (wm["cpu_cores"] / max(replicas, 1)) if wm else 0.0
-                actual_mem_per_replica = (wm["mem_mib"]   / max(replicas, 1)) if wm else 0.0
+        # ── 4-5. Gemini-powered analysis (skipped if AI not configured) ───────
+        if get_model():
+            metrics_note = (
+                "IMPORTANT: Real CPU/memory usage IS available from the metrics server for some workloads "
+                "(marked MEASURED in the inventory). Use those exact values for billable_cores calculation. "
+                "For workloads without measured data, estimate from workload type and image name."
+                if metrics_source == "metrics-server"
+                else
+                "NOTE: No metrics server available. Estimate actual CPU/memory usage from workload type, "
+                "image name, and engineering heuristics for each workload."
+            )
 
-                billable_cores = max(total_req_cpu, actual_cpu_per_replica)
-                billing_basis  = "usage" if (wm and actual_cpu_per_replica > total_req_cpu) else "requests"
-                current_cost   = billable_cores * cost_per_core * replicas
-                total_current += current_cost
-
-                actual_usage_cpu = (f"{wm['cpu_cores']:.3f} cores (measured)"
-                                    if wm else "unknown (no metrics server)")
-                actual_usage_mem = (f"{wm['mem_mib']:.0f} MiB (measured)"
-                                    if wm else "unknown (no metrics server)")
-
-                headroom_pct = "N/A"
-                if total_lim_cpu > 0 and wm:
-                    headroom_pct = f"{max(0,(1 - actual_cpu_per_replica/total_lim_cpu)*100):.0f}%"
-
-                if total_lim_mem_mib == 0:
-                    rtype    = "Stability Risk ⚠️"
-                    reason   = "No memory limit set — pod can consume unlimited node memory."
-                    action   = "Set resources.limits.memory: 256Mi"
-                    severity = "high"
-                    insight  = "Without limits the scheduler cannot protect other pods on the same node."
-                    rec_cost = current_cost
-                elif billing_basis == "usage" and wm:
-                    rtype    = "Performance Risk 📈"
-                    reason   = (f"Actual CPU ({actual_cpu_per_replica:.3f} cores/replica) "
-                                f"exceeds request ({total_req_cpu:.3f} cores). "
-                                f"Billed on usage — throttling risk.")
-                    action   = f"Increase cpu_request to ~{actual_cpu_per_replica*1.3:.3f} cores"
-                    severity = "high"
-                    insight  = "Under-provisioned; Kubernetes throttles CPU at the request/limit boundary."
-                    rec_cost = actual_cpu_per_replica * 1.3 * cost_per_core * replicas
-                elif billing_basis == "requests" and total_req_cpu > 0 and wm:
-                    save_ratio = max(0, (total_req_cpu - actual_cpu_per_replica) / total_req_cpu)
-                    if save_ratio > 0.3:
-                        rtype    = "Cost Saving 📉"
-                        reason   = (f"CPU request ({total_req_cpu:.3f} cores/replica) is "
-                                    f"{save_ratio*100:.0f}% above measured usage "
-                                    f"({actual_cpu_per_replica:.3f} cores). "
-                                    f"Billed on requests — over-provisioned.")
-                        action   = f"Reduce cpu_request to ~{actual_cpu_per_replica*1.3:.3f} cores"
-                        severity = "medium"
-                        insight  = "Right-sizing to usage × 1.3 reclaims wasted allocation without risk."
-                        rec_cost = actual_cpu_per_replica * 1.3 * cost_per_core * replicas
-                    else:
-                        rtype    = "Right-Sized ✅"
-                        reason   = "CPU requests are well-sized relative to actual usage."
-                        action   = "No immediate action needed."
-                        severity = "low"
-                        insight  = "Workload is well proportioned. Review again monthly."
-                        rec_cost = current_cost
-                else:
-                    rtype    = "Right-Sized ✅"
-                    reason   = "Resource limits configured. Enable AI for automated right-sizing."
-                    action   = "Deploy metrics-server or configure AI for deeper analysis."
-                    severity = "low"
-                    insight  = "Configure AI or metrics-server for intelligent utilisation estimation."
-                    rec_cost = current_cost
-
-                total_recommended += rec_cost
-                recommendations.append({
-                    "resource": name, "kind": kind, "replicas": replicas,
-                    "type": rtype, "reason": reason,
-                    "actual_usage_cpu": actual_usage_cpu,
-                    "actual_usage_mem": actual_usage_mem,
-                    "capacity_headroom_pct": headroom_pct,
-                    "billable_cores": round(billable_cores, 4),
-                    "billing_basis":  billing_basis,
-                    "current_cpu_request": f"{total_req_cpu:.3f} cores" if total_req_cpu else "not-set",
-                    "current_mem_limit":   "not set" if total_lim_mem_mib == 0 else f"{total_lim_mem_mib:.0f}Mi",
-                    "current_monthly_cost":     round(current_cost, 2),
-                    "recommended_monthly_cost": round(rec_cost, 2),
-                    "monthly_saving":           round(current_cost - rec_cost, 2),
-                    "action": action, "severity": severity, "ai_insight": insight
-                })
-
-            return jsonify({
-                "cost_rate_per_core":             cost_per_core,
-                "currency":                       "EUR",
-                "metrics_source":                 metrics_source,
-                "total_current_monthly_cost":     round(total_current, 2),
-                "total_recommended_monthly_cost": round(total_recommended, 2),
-                "total_monthly_saving":           round(total_current - total_recommended, 2),
-                "summary": (
-                    f"Analysed {len(raw_workloads)} workloads via {metrics_source}. "
-                    "AI not configured — using spec + measured metrics checks."
-                ),
-                "recommendations": recommendations
-            })
-
-        # ── 5. Gemini-powered analysis ────────────────────────────────────────
-        metrics_note = (
-            "IMPORTANT: Real CPU/memory usage IS available from the metrics server for some workloads "
-            "(marked MEASURED in the inventory). Use those exact values for billable_cores calculation. "
-            "For workloads without measured data, estimate from workload type and image name."
-            if metrics_source == "metrics-server"
-            else
-            "NOTE: No metrics server available. Estimate actual CPU/memory usage from workload type, "
-            "image name, and engineering heuristics for each workload."
-        )
-
-        prompt = f"""You are a senior Kubernetes cost-optimization engineer with the following billing model:
+            prompt = f"""You are a senior Kubernetes cost-optimization engineer with the following billing model:
 
 COST MODEL (apply exactly):
 - €{cost_per_core} EUR per CPU core per month
@@ -1457,22 +1384,152 @@ Rules:
 - monthly_saving POSITIVE = saving (reducing over-provisioned). NEGATIVE = cost increase (raising under-provisioned).
 - Return ONLY JSON. No markdown. No explanation.
 """
-        response = gemini_generate_with_retry(prompt)
-        result   = parse_gemini_json(response.text)
-        result.setdefault("cost_rate_per_core", cost_per_core)
-        result.setdefault("currency", "EUR")
-        result.setdefault("metrics_source", metrics_source)
-        result.setdefault("recommendations", [])
-        result.setdefault("summary", "Analysis complete.")
-        _cache_set(cache_key, result)
-        return jsonify(result)
+            gemini_start = time.time()
+            response = gemini_generate_with_retry(prompt)
+            print(f"[optimize] ⏱  Gemini response: {time.time() - gemini_start:.1f}s | "
+                  f"{len(response.text)} chars")
+            result   = parse_gemini_json(response.text)
+            result.setdefault("cost_rate_per_core", cost_per_core)
+            result.setdefault("currency", "EUR")
+            result.setdefault("metrics_source", metrics_source)
+            result.setdefault("recommendations", [])
+            result.setdefault("summary", "Analysis complete.")
+            print(f"[optimize] ⏱  Total: {time.time() - _optimizer_start:.1f}s | "
+                  f"{len(result.get('recommendations', []))} recommendations")
+            _cache_set(cache_key, result)
+            return jsonify(result)
+        else:
+            print(f"[optimize] Gemini not configured — using deterministic analysis")
 
     except json.JSONDecodeError as e:
-        print(f"[optimize] Gemini returned non-JSON: {e}")
-        return jsonify({"error": "AI returned malformed output. Try again.", "recommendations": []}), 500
+        print(f"[optimize] Gemini returned non-JSON after {time.time() - _optimizer_start:.1f}s: {e}")
+        # Log the raw response for debugging (truncated)
+        try:
+            raw_preview = response.text[:500] if response and response.text else '(empty)'
+            print(f"[optimize] Raw Gemini response preview: {raw_preview}")
+        except Exception:
+            pass
+        # Fall back to deterministic analysis instead of returning error
+        print(f"[optimize] Falling back to deterministic analysis for {len(raw_workloads)} workloads")
+        _cache_release(cache_key)
     except Exception as e:
-        print(f"[optimize] Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"[optimize] Gemini error after {time.time() - _optimizer_start:.1f}s: {e}")
+        # Fall back to deterministic analysis
+        print(f"[optimize] Falling back to deterministic analysis for {len(raw_workloads)} workloads")
+        _cache_release(cache_key)
+
+    # ── 6. Deterministic fallback (runs when Gemini fails or is unavailable) ──
+    # This code was previously inside `if not get_model():` but now also serves
+    # as the fallback when Gemini returns malformed JSON or times out.
+    recommendations   = []
+    total_current     = 0.0
+    total_recommended = 0.0
+
+    for kind, name, replicas, containers in raw_workloads:
+        total_req_cpu     = 0.0
+        total_lim_cpu     = 0.0
+        total_lim_mem_mib = 0.0
+        for c in containers:
+            res = getattr(c, 'resources', None)
+            req = getattr(res, 'requests', None) or {}
+            lim = getattr(res, 'limits',   None) or {}
+            total_req_cpu     += _parse_cpu_cores(req.get('cpu'))
+            total_lim_cpu     += _parse_cpu_cores(lim.get('cpu'))
+            total_lim_mem_mib += _parse_mem_mib(lim.get('memory'))
+
+        wm = workload_metrics_map.get(name)
+        actual_cpu_per_replica = (wm["cpu_cores"] / max(replicas, 1)) if wm else 0.0
+        actual_mem_per_replica = (wm["mem_mib"]   / max(replicas, 1)) if wm else 0.0
+
+        billable_cores = max(total_req_cpu, actual_cpu_per_replica)
+        billing_basis  = "usage" if (wm and actual_cpu_per_replica > total_req_cpu) else "requests"
+        current_cost   = billable_cores * cost_per_core * replicas
+        total_current += current_cost
+
+        actual_usage_cpu = (f"{wm['cpu_cores']:.3f} cores (measured)"
+                            if wm else "unknown (no metrics server)")
+        actual_usage_mem = (f"{wm['mem_mib']:.0f} MiB (measured)"
+                            if wm else "unknown (no metrics server)")
+
+        headroom_pct = "N/A"
+        if total_lim_cpu > 0 and wm:
+            headroom_pct = f"{max(0,(1 - actual_cpu_per_replica/total_lim_cpu)*100):.0f}%"
+
+        if total_lim_mem_mib == 0:
+            rtype    = "Stability Risk \u26a0\ufe0f"
+            reason   = "No memory limit set \u2014 pod can consume unlimited node memory."
+            action   = "Set resources.limits.memory: 256Mi"
+            severity = "high"
+            insight  = "Without limits the scheduler cannot protect other pods on the same node."
+            rec_cost = current_cost
+        elif billing_basis == "usage" and wm:
+            rtype    = "Performance Risk \ud83d\udcc8"
+            reason   = (f"Actual CPU ({actual_cpu_per_replica:.3f} cores/replica) "
+                        f"exceeds request ({total_req_cpu:.3f} cores). "
+                        f"Billed on usage \u2014 throttling risk.")
+            action   = f"Increase cpu_request to ~{actual_cpu_per_replica*1.3:.3f} cores"
+            severity = "high"
+            insight  = "Under-provisioned; Kubernetes throttles CPU at the request/limit boundary."
+            rec_cost = actual_cpu_per_replica * 1.3 * cost_per_core * replicas
+        elif billing_basis == "requests" and total_req_cpu > 0 and wm:
+            save_ratio = max(0, (total_req_cpu - actual_cpu_per_replica) / total_req_cpu)
+            if save_ratio > 0.3:
+                rtype    = "Cost Saving \ud83d\udcc9"
+                reason   = (f"CPU request ({total_req_cpu:.3f} cores/replica) is "
+                            f"{save_ratio*100:.0f}% above measured usage "
+                            f"({actual_cpu_per_replica:.3f} cores). "
+                            f"Billed on requests \u2014 over-provisioned.")
+                action   = f"Reduce cpu_request to ~{actual_cpu_per_replica*1.3:.3f} cores"
+                severity = "medium"
+                insight  = "Right-sizing to usage \u00d7 1.3 reclaims wasted allocation without risk."
+                rec_cost = actual_cpu_per_replica * 1.3 * cost_per_core * replicas
+            else:
+                rtype    = "Right-Sized \u2705"
+                reason   = "CPU requests are well-sized relative to actual usage."
+                action   = "No immediate action needed."
+                severity = "low"
+                insight  = "Workload is well proportioned. Review again monthly."
+                rec_cost = current_cost
+        else:
+            rtype    = "Right-Sized \u2705"
+            reason   = "Resource limits configured."
+            action   = "Deploy metrics-server or configure AI for deeper analysis."
+            severity = "low"
+            insight  = "Configure AI or metrics-server for intelligent utilisation estimation."
+            rec_cost = current_cost
+
+        total_recommended += rec_cost
+        recommendations.append({
+            "resource": name, "kind": kind, "replicas": replicas,
+            "type": rtype, "reason": reason,
+            "actual_usage_cpu": actual_usage_cpu,
+            "actual_usage_mem": actual_usage_mem,
+            "capacity_headroom_pct": headroom_pct,
+            "billable_cores": round(billable_cores, 4),
+            "billing_basis":  billing_basis,
+            "current_cpu_request": f"{total_req_cpu:.3f} cores" if total_req_cpu else "not-set",
+            "current_mem_limit":   "not set" if total_lim_mem_mib == 0 else f"{total_lim_mem_mib:.0f}Mi",
+            "current_monthly_cost":     round(current_cost, 2),
+            "recommended_monthly_cost": round(rec_cost, 2),
+            "monthly_saving":           round(current_cost - rec_cost, 2),
+            "action": action, "severity": severity, "ai_insight": insight
+        })
+
+    fallback_result = {
+        "cost_rate_per_core":             cost_per_core,
+        "currency":                       "EUR",
+        "metrics_source":                 metrics_source,
+        "total_current_monthly_cost":     round(total_current, 2),
+        "total_recommended_monthly_cost": round(total_recommended, 2),
+        "total_monthly_saving":           round(total_current - total_recommended, 2),
+        "summary": (
+            f"Analysed {len(raw_workloads)} workloads via {metrics_source}. "
+            "Using spec + measured metrics analysis."
+        ),
+        "recommendations": recommendations
+    }
+    _cache_set(cache_key, fallback_result)
+    return jsonify(fallback_result)
 
 # --- Gemini Integration ---
 
