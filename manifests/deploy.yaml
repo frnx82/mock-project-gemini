@@ -88,14 +88,16 @@ spec:
         - containerPort: 8080
         # Liveness: ultra-lightweight — no K8s or Gemini calls.
         # If this fails, the Flask worker is truly dead → restart pod.
+        # Tuned for AI-heavy workloads: Gemini calls can take 30-120s and
+        # may temporarily block gevent workers from answering probes.
         livenessProbe:
           httpGet:
             path: /api/ping
             port: 8080
-          initialDelaySeconds: 15
+          initialDelaySeconds: 20
           periodSeconds: 15
-          timeoutSeconds: 5
-          failureThreshold: 4      # Allow 4 failures (60s) before killing
+          timeoutSeconds: 10
+          failureThreshold: 6      # Allow 6 failures (90s) before killing
           successThreshold: 1
         # Readiness: lightweight health check — no Gemini calls.
         # Keeps pod out of Service endpoints while starting up or overloaded.
@@ -105,9 +107,26 @@ spec:
             port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3      # 30s of failures → stop routing traffic
+          timeoutSeconds: 10
+          failureThreshold: 6      # 60s of failures → stop routing traffic
           successThreshold: 1
+        # Startup: give the app up to 120s to initialize (Gemini SDK,
+        # K8s client, etc.) before liveness/readiness probes kick in.
+        startupProbe:
+          httpGet:
+            path: /api/ping
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 24     # 5 * 24 = 120s max startup time
+        resources:
+          requests:
+            cpu: 250m              # scheduler guarantee (100m too low for 4 workers)
+            memory: 512Mi
+          limits:
+            cpu: "2"               # CRITICAL: 500m causes throttling during AI calls
+            memory: 4Gi            #   → probes can't respond → pod killed
         env:
         - name: POD_NAMESPACE
           valueFrom:
