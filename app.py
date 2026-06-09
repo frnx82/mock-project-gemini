@@ -193,20 +193,31 @@ def _splunk_mcp_call(tool_name, arguments=None):
         )
     try:
         import requests as _requests
-        resp = _requests.post(SPLUNK_MCP_URL, json={
-            'jsonrpc': '2.0',
-            'id': '1',
-            'method': 'tools/call',
-            'params': {
-                'name': tool_name,
-                'arguments': arguments or {}
-            }
-        }, timeout=30)
-        data = resp.json()
-        # JSON-RPC error
+        resp = _requests.post(
+            SPLUNK_MCP_URL,
+            json={
+                'jsonrpc': '2.0',
+                'id': '1',
+                'method': 'tools/call',
+                'params': {
+                    'name': tool_name,
+                    'arguments': arguments or {}
+                }
+            },
+            headers={'Connection': 'close'},   # Prevent keep-alive issues with BaseHTTPRequestHandler
+            timeout=30
+        )
+        # Guard against non-JSON responses (proxies, error pages)
+        try:
+            data = resp.json()
+        except Exception:
+            return f'Splunk MCP error: received non-JSON response (HTTP {resp.status_code}): {resp.text[:200]}'
+        # JSON-RPC error — handle both dict {'message': '...'} and string error values
         if 'error' in data:
             err = data['error']
-            return f'Splunk MCP error: {err.get("message", str(err))}'
+            if isinstance(err, dict):
+                return f'Splunk MCP error: {err.get("message", str(err))}'
+            return f'Splunk MCP error: {err}'
         # Success — extract text from MCP content array
         content = data.get('result', {}).get('content', [])
         if content:
