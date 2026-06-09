@@ -171,6 +171,50 @@ def _cache_release(key):
     with _ai_inflight_lock:
         _ai_inflight.pop(key, None)
 
+# ── Splunk MCP Integration ───────────────────────────────────────────────────
+# Calls the Splunk MCP server (services/mcp_splunk) via JSON-RPC over HTTP.
+# Set SPLUNK_MCP_URL to the service endpoint, e.g.:
+#   export SPLUNK_MCP_URL=http://splunk-mcp-service:8080
+# When not configured, Splunk tools return a friendly "not configured" message.
+# ─────────────────────────────────────────────────────────────────────────────
+SPLUNK_MCP_URL = os.getenv('SPLUNK_MCP_URL', '')
+
+def _splunk_mcp_call(tool_name, arguments=None):
+    """Call a Splunk MCP tool via JSON-RPC POST.
+
+    Returns the result text string on success, or an error message string
+    on failure — never raises (callers display the return value directly).
+    """
+    if not SPLUNK_MCP_URL:
+        return (
+            '⚠️ Splunk MCP not configured — set the SPLUNK_MCP_URL env var.\n'
+            'Expected: http://splunk-mcp-service:8080\n\n'
+            'See: docs/SPLUNK-MCP-DEPLOYMENT-GUIDE.md'
+        )
+    try:
+        import requests as _requests
+        resp = _requests.post(SPLUNK_MCP_URL, json={
+            'jsonrpc': '2.0',
+            'id': '1',
+            'method': 'tools/call',
+            'params': {
+                'name': tool_name,
+                'arguments': arguments or {}
+            }
+        }, timeout=30)
+        data = resp.json()
+        # JSON-RPC error
+        if 'error' in data:
+            err = data['error']
+            return f'Splunk MCP error: {err.get("message", str(err))}'
+        # Success — extract text from MCP content array
+        content = data.get('result', {}).get('content', [])
+        if content:
+            return '\n'.join(c.get('text', '') for c in content)
+        return '(empty result from Splunk)'
+    except Exception as e:
+        return f'Splunk MCP connection error: {e}'
+
 def parse_gemini_json(raw_text):
     """Robustly parse JSON from Gemini output, handling common malformations.
 
@@ -4255,6 +4299,67 @@ def _k8s_list_pdbs(namespace: str) -> str:
         return f'Error listing PDBs: {e}'
 
 
+# ── Splunk MCP Tool Functions ──────────────────────────────────────────────
+# Each function wraps _splunk_mcp_call() with the correct tool name.
+# Optional params with None/empty values are stripped before sending.
+
+def _splunk_search(query: str, earliest: str = '-1h', latest: str = 'now',
+                   max_results: int = 100, index: str = '') -> str:
+    """Run an arbitrary SPL query via Splunk MCP."""
+    args = {'query': query, 'earliest': earliest, 'latest': latest, 'max_results': max_results}
+    if index:
+        args['index'] = index
+    return _splunk_mcp_call('splunk_search', args)
+
+
+def _splunk_get_pod_logs(service: str, pattern: str = '', level: str = '',
+                         namespace: str = '', limit: int = 50,
+                         earliest: str = '-1h', index: str = '') -> str:
+    """Get K8s pod logs for a service from Splunk."""
+    args = {'service': service}
+    if pattern:   args['pattern'] = pattern
+    if level:     args['level'] = level
+    if namespace: args['namespace'] = namespace
+    if limit:     args['limit'] = limit
+    if earliest:  args['earliest'] = earliest
+    if index:     args['index'] = index
+    return _splunk_mcp_call('splunk_get_pod_logs', args)
+
+
+def _splunk_search_by_correlation_id(correlation_id: str, earliest: str = '-24h',
+                                      limit: int = 100, index: str = '') -> str:
+    """Trace a request across services by correlation/trace ID."""
+    args = {'correlation_id': correlation_id, 'earliest': earliest, 'limit': limit}
+    if index:
+        args['index'] = index
+    return _splunk_mcp_call('splunk_search_by_correlation_id', args)
+
+
+def _splunk_get_error_summary(service: str = '', earliest: str = '-24h',
+                               index: str = '') -> str:
+    """Get error rate and top errors for a service or all services."""
+    args = {}
+    if service:  args['service'] = service
+    if earliest: args['earliest'] = earliest
+    if index:    args['index'] = index
+    return _splunk_mcp_call('splunk_get_error_summary', args)
+
+
+def _splunk_list_indexes() -> str:
+    """List available Splunk indexes with size and event counts."""
+    return _splunk_mcp_call('splunk_list_indexes')
+
+
+def _splunk_get_saved_searches() -> str:
+    """List saved searches and reports configured in Splunk."""
+    return _splunk_mcp_call('splunk_get_saved_searches')
+
+
+def _splunk_health() -> str:
+    """Check Splunk connection health and server info."""
+    return _splunk_mcp_call('splunk_health')
+
+
 # ── Gemini Tool Declarations ───────────────────────────────────────────────
 
 if _genai_types:
@@ -4517,6 +4622,60 @@ if _genai_types:
                                  'container': ('STRING', 'Optional container name for multi-container pods')},
                                 required=['namespace', 'pod_name', 'command'])
         ),
+        # ── Splunk MCP tools (log search via external MCP server) ──────────
+        _genai_types.FunctionDeclaration(
+            name='splunk_search',
+            description='Run an arbitrary SPL (Splunk Processing Language) query against Splunk via MCP. Use when users want to search centralized logs, not just K8s pod logs. Supports any valid SPL query.',
+            parameters=_schema({'query': ('STRING', 'SPL query string, e.g. index=prod_k8s level=ERROR | stats count by service'),
+                                 'earliest': ('STRING', 'Time range start, e.g. -1h, -24h, -7d. Default: -1h'),
+                                 'latest': ('STRING', 'Time range end. Default: now'),
+                                 'max_results': ('INTEGER', 'Max number of results to return. Default: 100'),
+                                 'index': ('STRING', 'Splunk index to search, e.g. prod_k8s, main')},
+                                required=['query'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='splunk_get_pod_logs',
+            description='Get Kubernetes pod logs for a specific service from Splunk, optionally filtered by pattern, log level, or namespace. Use this instead of k8s_get_pod_logs when users want centralized Splunk logs.',
+            parameters=_schema({'service': ('STRING', 'Service or pod name, e.g. billing-service, payment-gateway'),
+                                 'pattern': ('STRING', 'Text pattern to search in logs, e.g. timeout, NullPointer, OOM'),
+                                 'level': ('STRING', 'Log level filter: ERROR, WARN, INFO, DEBUG'),
+                                 'namespace': ('STRING', 'K8s namespace filter, e.g. prod, uat, staging'),
+                                 'limit': ('INTEGER', 'Max log entries to return. Default: 50'),
+                                 'earliest': ('STRING', 'Time range start. Default: -1h'),
+                                 'index': ('STRING', 'Splunk index')},
+                                required=['service'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='splunk_search_by_correlation_id',
+            description='Trace a request across all microservices by correlation ID, trace ID, or request ID. Shows the full journey through the service chain. Use when users want to trace or follow a request.',
+            parameters=_schema({'correlation_id': ('STRING', 'Correlation ID, trace ID, or request ID to trace'),
+                                 'earliest': ('STRING', 'How far back to search. Default: -24h'),
+                                 'limit': ('INTEGER', 'Max results. Default: 100'),
+                                 'index': ('STRING', 'Splunk index')},
+                                required=['correlation_id'])
+        ),
+        _genai_types.FunctionDeclaration(
+            name='splunk_get_error_summary',
+            description='Get error rate summary and top errors for a specific service or all services from Splunk. Use when users ask about error rates, error breakdowns, or which services have the most errors.',
+            parameters=_schema({'service': ('STRING', 'Service name to filter (omit for all services)'),
+                                 'earliest': ('STRING', 'Time range. Default: -24h'),
+                                 'index': ('STRING', 'Splunk index')})
+        ),
+        _genai_types.FunctionDeclaration(
+            name='splunk_list_indexes',
+            description='List all available Splunk indexes with their size and event counts. Use when users ask what indexes are available or to discover data sources.',
+            parameters=_schema({})
+        ),
+        _genai_types.FunctionDeclaration(
+            name='splunk_get_saved_searches',
+            description='List saved searches and reports configured in Splunk. Use when users ask about existing dashboards, alerts, or saved queries.',
+            parameters=_schema({})
+        ),
+        _genai_types.FunctionDeclaration(
+            name='splunk_health',
+            description='Check Splunk MCP server connection health and Splunk server info. Use when users ask if Splunk is connected or to troubleshoot Splunk connectivity.',
+            parameters=_schema({})
+        ),
     ])
 
     # Dispatcher: maps function name → Python function call
@@ -4561,6 +4720,14 @@ if _genai_types:
         'k8s_delete_pod':            lambda a: _k8s_delete_pod(**a),
         'k8s_rollback_deployment':   lambda a: _k8s_rollback_deployment(**a),
         'k8s_exec_command':          lambda a: _k8s_exec_command(**a),
+        # Splunk MCP tools
+        'splunk_search':                    lambda a: _splunk_search(**a),
+        'splunk_get_pod_logs':              lambda a: _splunk_get_pod_logs(**a),
+        'splunk_search_by_correlation_id':  lambda a: _splunk_search_by_correlation_id(**a),
+        'splunk_get_error_summary':         lambda a: _splunk_get_error_summary(**a),
+        'splunk_list_indexes':              lambda a: _splunk_list_indexes(),
+        'splunk_get_saved_searches':        lambda a: _splunk_get_saved_searches(),
+        'splunk_health':                    lambda a: _splunk_health(),
     }
 else:
     # google-genai not available — stub out so the app doesn't crash
@@ -4686,6 +4853,7 @@ def converse():
         system_instruction = (
             f"You are an expert Kubernetes SRE agent embedded in the GDC Dashboard "
             f"for namespace '{namespace}'. You have access to 24 live Kubernetes API tools "
+            f"and 7 Splunk log search tools (via MCP), "
             f"including both READ and WRITE operations.\n"
             f"When the user asks a question:\n"
             f"1. Use the available tools to fetch REAL live data from the cluster\n"
@@ -4693,7 +4861,7 @@ def converse():
             f"3. Give a direct, specific, data-backed answer — never say 'run this command yourself'\n"
             f"4. Use Markdown formatting with tables where helpful\n"
             f"5. Be concise and actionable\n\n"
-            f"CAPABILITIES:\n"
+            f"KUBERNETES CAPABILITIES:\n"
             f"- READ: list pods, deployments, services, statefulsets, configmaps, secrets, "
             f"events, logs, PVCs, HPA, jobs, nodes, endpoints, namespace summary\n"
             f"- WRITE: scale deployments/statefulsets (k8s_scale_deployment), "
@@ -4703,6 +4871,21 @@ def converse():
             f"or a specific revision number\n"
             f"- EXEC: run commands inside pods (k8s_exec_command) — curl, ls, env, ps, "
             f"nslookup, df, cat, etc. Dangerous commands are blocked.\n\n"
+            f"SPLUNK LOG SEARCH (via Splunk MCP server):\n"
+            f"- splunk_search: Run arbitrary SPL queries against centralized logs\n"
+            f"- splunk_get_pod_logs: Get pod/service logs filtered by pattern, level, namespace\n"
+            f"- splunk_search_by_correlation_id: Trace requests across microservices by correlation/trace ID\n"
+            f"- splunk_get_error_summary: Get error rates and top errors by service\n"
+            f"- splunk_list_indexes: Discover available Splunk indexes\n"
+            f"- splunk_get_saved_searches: List saved searches and alerts\n"
+            f"- splunk_health: Check Splunk connection status\n\n"
+            f"WHEN TO USE SPLUNK vs K8s LOGS:\n"
+            f"- Use k8s_get_pod_logs for LIVE pod logs directly from the cluster (real-time)\n"
+            f"- Use splunk_get_pod_logs/splunk_search for CENTRALIZED log search (historical, cross-service)\n"
+            f"- Use splunk_search_by_correlation_id to TRACE a request across services\n"
+            f"- Use splunk_get_error_summary for ERROR RATE analysis\n"
+            f"- When the user says 'Splunk', 'search logs', 'log search', 'trace request', "
+            f"'correlation ID', or 'error rate' — prefer Splunk tools\n\n"
             f"When asked to scale, restart, delete, rollback, or exec — USE the action tools directly. "
             f"Do NOT say you cannot perform actions. You CAN.\n\n"
             f"Current namespace: {namespace}"
@@ -6797,6 +6980,10 @@ def ai_status():
             'GCP_REGION': os.getenv('GCP_REGION', 'us-central1'),
             'GOOGLE_APPLICATION_CREDENTIALS': os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '(not set)'),
             'creds_file_exists': os.path.exists(os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')) if os.getenv('GOOGLE_APPLICATION_CREDENTIALS') else False,
+        },
+        'splunk_mcp': {
+            'configured': bool(SPLUNK_MCP_URL),
+            'url': SPLUNK_MCP_URL or '(not set — set SPLUNK_MCP_URL)',
         }
     })
 

@@ -132,6 +132,18 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        # ── Splunk MCP Integration ──────────────────────────────
+        # Points to the Splunk MCP server's ClusterIP service.
+        # The Splunk MCP server must be deployed in the same namespace
+        # (or use the full DNS: splunk-mcp-service.<namespace>.svc.cluster.local)
+        #
+        # To deploy the Splunk MCP server:
+        #   kubectl apply -f ../mcps/services/mcp_splunk/manifests/deploy.yaml -n YOUR_NAMESPACE
+        #
+        # For cross-namespace access, use:
+        #   http://splunk-mcp-service.OTHER_NAMESPACE.svc.cluster.local:8080
+        - name: SPLUNK_MCP_URL
+          value: "http://splunk-mcp-service:8080"
 ---
 apiVersion: v1
 kind: Service
