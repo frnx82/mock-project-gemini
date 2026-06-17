@@ -4751,10 +4751,8 @@
 
         function switchMainTab(tab) {
             // Persist active tab in URL hash so page refresh restores it
-            // Preserve existing sub-tab when switching main tabs
-            const existingSub = (window.location.hash.match(/[#&]sub=([^&]+)/) || [])[1] || '';
-            const subPart = existingSub ? '&sub=' + existingSub : '';
-            try { history.replaceState(null, '', '#tab=' + tab + subPart); } catch (e) { }
+            // Clear sub-tab when switching main tabs — each tab has its own sub-tabs
+            try { history.replaceState(null, '', '#tab=' + tab); } catch (e) { }
 
             const workloadsBtn = document.getElementById('main-tab-workloads');
             const networkingBtn = document.getElementById('main-tab-networking');
@@ -6212,9 +6210,11 @@
             const mainTab = (window.location.hash.match(/[#&]tab=([^&]+)/) || [])[1] || 'workloads';
             try { history.replaceState(null, '', '#tab=' + mainTab + '&sub=' + type); } catch (e) { }
 
-            // Update buttons
+            // Update buttons — use exact match (type + 's') to avoid
+            // "Service" matching both "Services" and "VirtualServices"
+            const targetLabel = type + 's';
             Array.from(tabsContainer.children).forEach(btn => {
-                btn.classList.toggle('active', btn.innerText.includes(type));
+                btn.classList.toggle('active', btn.innerText.trim() === targetLabel);
             });
 
             // Update content visibility
