@@ -5961,6 +5961,7 @@
                         actions += _wBtn('btn btn-default', '&#43;', 'scale-up', item.name, item.type);
                         actions += _wBtn('ai-btn ai-btn-analyze', '&#129302; AI Diagnose', 'diagnose-wl', item.name, item.type);
                         actions += _wBtn('btn btn-default', 'Config', 'config', item.name, item.type);
+                        actions += `<button class="btn btn-default" style="font-size:12px;padding:3px 8px;" onclick="openYamlModal('${item.name}','${item.type}')">📄 YAML</button>`;
                         actions += _wBtn('btn btn-default', '&#8635; Restart', 'restart', item.name, item.type);
 
                         if (HEAL_STATUSES.has(item.status)) actions += _healBtn(item.name, item.type, item.status);
@@ -6003,7 +6004,14 @@
                             : '<span style="color:#5e6178;font-size:11px;">—</span>';
                         labelsCell = `<td style="max-width:260px;vertical-align:middle;">${inner}</td>`;
                     }
-                    html += `<tr><td style="font-weight:600;max-width:200px;word-break:break-word;">${item.name}</td>${statusCell}${readyCell}${labelsCell}<td style="color:#888;font-size:12px;">${item.age || '--'}</td><td>${actions}</td></tr>`;
+                    // Name cell — clickable for Deployment/StatefulSet to navigate to related pods
+                    let nameCell;
+                    if (type === 'Deployment' || type === 'StatefulSet') {
+                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:#818cf8;text-decoration:none;cursor:pointer;" title="View pods for ${item.name}">🔗 ${item.name}</a></td>`;
+                    } else {
+                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;">${item.name}</td>`;
+                    }
+                    html += `<tr>${nameCell}${statusCell}${readyCell}${labelsCell}<td style="color:#888;font-size:12px;">${item.age || '--'}</td><td>${actions}</td></tr>`;
                 });
 
                 html += '</tbody></table>';
@@ -6154,6 +6162,23 @@
                 const name = (row.querySelector('td') || {}).textContent || '';
                 row.style.display = name.toLowerCase().includes(term) ? '' : 'none';
             });
+        }
+
+        // Navigate from Deployment/StatefulSet → Pods sub-tab with search pre-filled
+        function navigateToPods(deploymentName) {
+            // 1. Switch to Pods sub-tab
+            switchTab('workloads', 'Pod');
+
+            // 2. Wait a tick for DOM to update, then fill search and filter
+            setTimeout(() => {
+                const searchInput = document.getElementById('wl-search-Pod');
+                if (searchInput) {
+                    searchInput.value = deploymentName;
+                    searchInput.focus();
+                    filterWorkloadTable('Pod');
+                    showToast(`🔗 Showing pods for: ${deploymentName}`, true);
+                }
+            }, 100);
         }
 
         function switchTab(panel, type) {
