@@ -6166,6 +6166,17 @@
 
         // Navigate from Deployment/StatefulSet → Pods sub-tab with search pre-filled
         function navigateToPods(deploymentName) {
+            // Strip common suffixes to create a broader search prefix
+            // e.g. "namespace-dev-frontend-deployment" → "namespace-dev-frontend"
+            const suffixes = ['-deployment', '-statefulset', '-svc', '-service', '-sts', '-ds'];
+            let searchPrefix = deploymentName;
+            for (const suffix of suffixes) {
+                if (searchPrefix.toLowerCase().endsWith(suffix)) {
+                    searchPrefix = searchPrefix.slice(0, -suffix.length);
+                    break;
+                }
+            }
+
             // 1. Switch to Pods sub-tab
             switchTab('workloads', 'Pod');
 
@@ -6173,10 +6184,22 @@
             setTimeout(() => {
                 const searchInput = document.getElementById('wl-search-Pod');
                 if (searchInput) {
+                    // Try full deployment name first, if no matches, try stripped prefix
                     searchInput.value = deploymentName;
-                    searchInput.focus();
                     filterWorkloadTable('Pod');
-                    showToast(`🔗 Showing pods for: ${deploymentName}`, true);
+
+                    // Check if any rows are visible
+                    const container = document.getElementById('workloads-Pod');
+                    const visibleRows = container ? container.querySelectorAll('tbody tr:not([style*="display: none"])') : [];
+
+                    if (visibleRows.length === 0 && searchPrefix !== deploymentName) {
+                        // No matches with full name — use stripped prefix
+                        searchInput.value = searchPrefix;
+                        filterWorkloadTable('Pod');
+                    }
+
+                    searchInput.focus();
+                    showToast(`🔗 Showing pods for: ${searchInput.value}`, true);
                 }
             }, 100);
         }
