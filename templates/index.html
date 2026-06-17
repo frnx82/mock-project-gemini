@@ -74,7 +74,7 @@
 
         .panel {
             flex: 1;
-            background: #fff;
+            background: var(--bg-surface);
             border-radius: 8px;
             padding: 15px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -251,13 +251,13 @@
             bottom: 0;
             width: 400px;
             max-height: 100vh;
-            background: #fff;
+            background: var(--bg-surface);
             box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
             z-index: 1900;
             display: flex;
             flex-direction: column;
             transition: right 0.3s ease;
-            border-left: 1px solid #e0e0e0;
+            border-left: 1px solid var(--border-color, #2a2b45);
         }
 
         #chat-panel.open {
@@ -303,8 +303,8 @@
         }
 
         .chat-bubble.assistant {
-            background: white;
-            color: #333;
+            background: var(--bg-surface);
+            color: var(--text-primary, #e0e0e0);
             align-self: flex-start;
             border-bottom-left-radius: 4px;
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
@@ -312,7 +312,7 @@
 
         #chat-input-area {
             padding: 12px;
-            border-top: 1px solid #eee;
+            border-top: 1px solid var(--border-color, #2a2b45);
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -373,8 +373,8 @@
         }
 
         .health-degraded {
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
         }
 
         .health-critical {
@@ -451,8 +451,8 @@
         }
 
         .job-pending {
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
         }
 
         /* ── Container log tabs ── */
@@ -587,8 +587,8 @@
         }
 
         .heal-risk-medium {
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
         }
 
         .heal-risk-high {
@@ -2880,28 +2880,28 @@
                 </div>
             </div>
 
-            <!-- Cost Summary Cards -->
+            <!-- Utilization Summary Cards -->
             <div id="opt-cost-row"
                 style="display:none; gap:12px; padding:16px 20px 0; flex-wrap:wrap; background:#0f1117;">
-                <div class="opt-cost-card" style="border-left:4px solid #6c757d;">
-                    <div class="opt-cost-label">Current Monthly Cost</div>
-                    <div class="opt-cost-value" id="opt-current-cost">€0</div>
-                    <div class="opt-cost-sub">billed CPU cores @ €60/core</div>
-                </div>
-                <div class="opt-cost-card" style="border-left:4px solid #0f9d58;">
-                    <div class="opt-cost-label">Recommended Cost</div>
-                    <div class="opt-cost-value" id="opt-rec-cost" style="color:#0f9d58;">€0</div>
-                    <div class="opt-cost-sub">after right-sizing</div>
-                </div>
-                <div class="opt-cost-card" id="opt-saving-card" style="border-left:4px solid #0f9d58;">
-                    <div class="opt-cost-label">💡 Monthly Saving</div>
-                    <div class="opt-cost-value" id="opt-saving" style="color:#0f9d58;">€0</div>
-                    <div class="opt-cost-sub" id="opt-saving-pct"></div>
-                </div>
                 <div class="opt-cost-card" style="border-left:4px solid #4285f4;">
                     <div class="opt-cost-label">Workloads Scanned</div>
                     <div class="opt-cost-value" id="opt-wl-count" style="color:#4285f4;">0</div>
                     <div class="opt-cost-sub" id="opt-wl-issues"></div>
+                </div>
+                <div class="opt-cost-card" style="border-left:4px solid #f4b400;">
+                    <div class="opt-cost-label">Avg CPU Utilization</div>
+                    <div class="opt-cost-value" id="opt-avg-cpu" style="color:#f4b400;">—</div>
+                    <div class="opt-cost-sub">actual vs requested</div>
+                </div>
+                <div class="opt-cost-card" style="border-left:4px solid #a78bfa;">
+                    <div class="opt-cost-label">Avg Memory Utilization</div>
+                    <div class="opt-cost-value" id="opt-avg-mem" style="color:#a78bfa;">—</div>
+                    <div class="opt-cost-sub">actual vs limits</div>
+                </div>
+                <div class="opt-cost-card" style="border-left:4px solid #0f9d58;">
+                    <div class="opt-cost-label">Metrics Source</div>
+                    <div class="opt-cost-value" id="opt-metrics-src" style="color:#0f9d58; font-size:16px;">—</div>
+                    <div class="opt-cost-sub" id="opt-metrics-note"></div>
                 </div>
             </div>
 
@@ -3198,83 +3198,8 @@
                 </tbody>
             </table>
 
-            <!-- ═══ OSS Vulnerability Scan Sub-panel ═══ -->
-            <div style="margin-top:28px; border-top:2px solid #2d2d3f; padding-top:20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="font-size:1.4em;">🔬</span>
-                        <div>
-                            <div style="font-size:15px; font-weight:700; color:#e0e0e0;">OSS Vulnerability Scan</div>
-                            <div style="font-size:12px; color:#888; margin-top:2px;">Trivy · OS packages &amp; language
-                                deps · CVE databases</div>
-                        </div>
-                        <span id="vuln-source-badge"
-                            style="display:none; font-size:11px; background:#6f42c1; color:#fff; padding:2px 10px; border-radius:12px;"></span>
-                    </div>
-                    <button class="btn btn-primary" onclick="renderVulnScan()"
-                        style="background:linear-gradient(135deg,#6f42c1,#4285f4); border:none;">
-                        🔬 Run Vulnerability Scan
-                    </button>
-                </div>
-
-                <!-- Vuln AI Summary -->
-                <div id="vuln-summary-card" style="display:none; margin:0 0 14px; padding:14px 18px;
-                    background:linear-gradient(135deg,#1a1a2e,#16213e); border-radius:10px;
-                    border-left:4px solid #6f42c1; color:#e0e0e0;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                        <span>🤖</span>
-                        <strong style="color:#a78bfa;">AI Vulnerability Assessment</strong>
-                    </div>
-                    <p id="vuln-summary-text" style="margin:0; font-size:13px; line-height:1.6;"></p>
-                    <div id="vuln-meta" style="margin-top:8px; font-size:11px; color:#666;"></div>
-                </div>
-
-                <!-- Vuln severity pills -->
-                <div id="vuln-severity-bar" style="display:none; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-                    <div class="sec-pill" onclick="filterVulnSeverity('Critical')" style="background:#dc3545;"><span
-                            id="vuln-count-critical">0</span> Critical</div>
-                    <div class="sec-pill" onclick="filterVulnSeverity('High')" style="background:#fd7e14;"><span
-                            id="vuln-count-high">0</span> High</div>
-                    <div class="sec-pill" onclick="filterVulnSeverity('Medium')" style="background:#d4a017;color:#111;">
-                        <span id="vuln-count-medium">0</span> Medium
-                    </div>
-                    <div class="sec-pill" onclick="filterVulnSeverity('Low')" style="background:#28a745;"><span
-                            id="vuln-count-low">0</span> Low</div>
-                    <div class="sec-pill" onclick="filterVulnSeverity(null)" style="background:#444;margin-left:auto;">
-                        Show All</div>
-                </div>
-
-                <!-- Vuln loading -->
-                <div id="vuln-loading" style="display:none; padding:20px; text-align:center; color:#888;">
-                    <div style="font-size:1.1em; margin-bottom:8px;">🔬 Scanning container images for CVEs...</div>
-                    <div style="font-size:12px; color:#666;">Querying Trivy against NVD, GitHub Advisory, and OS
-                        security databases</div>
-                    <span class="spinner"></span>
-                </div>
-
-                <!-- Vuln table -->
-                <div id="vuln-table-wrap" style="display:none;">
-                    <table class="table" style="font-size:13px;">
-                        <thead>
-                            <tr>
-                                <th style="width:85px;">Severity</th>
-                                <th style="width:170px;">Image</th>
-                                <th style="width:120px;">Package</th>
-                                <th style="width:80px;">Installed</th>
-                                <th style="width:80px;">Fixed In</th>
-                                <th>CVE / Issue</th>
-                                <th>Remediation</th>
-                            </tr>
-                        </thead>
-                        <tbody id="vuln-table-body">
-                        </tbody>
-                    </table>
-                </div>
-
-                <div id="vuln-placeholder" style="padding:20px; text-align:center; color:#555; font-size:13px;">
-                    Click <strong>🔬 Run Vulnerability Scan</strong> to scan container images for known CVEs.
-                </div>
-            </div>
+            <!-- ═══ OSS Vulnerability Scan — REMOVED ═══ -->
+            <!-- CVE/vulnerability scanning is handled by the dedicated pipeline system -->
             <!-- ═══ /OSS Vulnerability Scan ═══ -->
 
         </div>
@@ -4228,35 +4153,30 @@
     <div id="optimizerHelpModal" class="modal">
         <div class="modal-content" style="max-width: 680px;">
             <span class="close" onclick="closeModal('optimizerHelpModal')">&times;</span>
-            <h2 style="margin-top: 0; color: #0f9d58;">💰 AI Resource Optimizer</h2>
+            <h2 style="margin-top: 0; color: #0f9d58;">📊 AI Resource Optimizer</h2>
             <p style="color:#555; margin-bottom:12px;">Powered by AI. Analyses all workload specs
-                (Deployments, StatefulSets, DaemonSets, Jobs) and — since no metrics server is available —
-                <strong>estimates</strong> realistic CPU and memory usage from workload type, image name,
-                and
-                engineering heuristics. Then calculates costs and suggests right-sized resource configs.
+                (Deployments, StatefulSets, DaemonSets, Jobs) and compares actual CPU/memory usage
+                against requested resources. When metrics-server is available, uses <strong>real measured data</strong>;
+                otherwise <strong>estimates</strong> usage from workload type and image heuristics.
             </p>
 
-            <h4 style="color:#333; margin-bottom:8px;">🏷️ Cost Model (org-specific)</h4>
+            <h4 style="color:#333; margin-bottom:8px;">📈 What It Measures</h4>
             <table style="width:100%; font-size:13px; border-collapse:collapse; color:#444; margin-bottom:14px;">
                 <tr style="background:#f0fff4;">
-                    <td style="padding:7px 10px; font-weight:600; width:180px;">Rate</td>
-                    <td style="padding:7px 10px;"><strong>€60 per CPU core per month</strong></td>
+                    <td style="padding:7px 10px; font-weight:600; width:180px;">CPU Utilization</td>
+                    <td style="padding:7px 10px;"><code>actual_cpu / cpu_request × 100%</code><br>
+                        <span style="font-size:12px;color:#888;">Shows how much of requested CPU is actually used</span>
+                    </td>
                 </tr>
                 <tr>
-                    <td style="padding:7px 10px; font-weight:600;">Billing basis</td>
-                    <td style="padding:7px 10px;">
-                        <code>billable = max(cpu_requests, actual_cpu_usage)</code><br>
-                        <span style="font-size:12px;color:#888;">If requests &gt; usage → billed on requests
-                            (over-provisioned). If usage &gt; requests → billed on usage
-                            (under-provisioned).</span>
+                    <td style="padding:7px 10px; font-weight:600;">Memory Utilization</td>
+                    <td style="padding:7px 10px;"><code>actual_mem / mem_limit × 100%</code><br>
+                        <span style="font-size:12px;color:#888;">Shows how close to OOM the workload is running</span>
                     </td>
                 </tr>
                 <tr style="background:#f0fff4;">
-                    <td style="padding:7px 10px; font-weight:600;">Memory</td>
-                    <td style="padding:7px 10px;">Not billed separately, but OOM kills cause incidents —
-                        AI
-                        still
-                        recommends appropriate limits.</td>
+                    <td style="padding:7px 10px; font-weight:600;">Headroom</td>
+                    <td style="padding:7px 10px;">Remaining capacity before hitting CPU limits — buffer for traffic spikes</td>
                 </tr>
             </table>
 
@@ -4266,34 +4186,29 @@
                     <td style="padding:7px 10px; font-weight:600; width:160px; color:#0f9d58;">📉 Cost
                         Saving
                     </td>
-                    <td style="padding:7px 10px;">CPU requests far exceed estimated usage —
-                        over-provisioned,
-                        billed on
-                        requests. Reducing them saves money.</td>
+                    <td style="padding:7px 10px;">CPU requests far exceed actual usage — resources are
+                        over-provisioned and wasting cluster capacity. Reducing them frees resources.</td>
                 </tr>
                 <tr>
                     <td style="padding:7px 10px; font-weight:600; color:#fd7e14;">📈 Performance Risk</td>
-                    <td style="padding:7px 10px;">Estimated CPU usage exceeds requests — under-provisioned,
-                        billed on
-                        usage and at risk of throttling.</td>
+                    <td style="padding:7px 10px;">Actual CPU usage exceeds requests — under-provisioned,
+                        at risk of CPU throttling and degraded performance.</td>
                 </tr>
                 <tr style="background:#f0fff4;">
                     <td style="padding:7px 10px; font-weight:600; color:#dc3545;">⚠️ Stability Risk</td>
                     <td style="padding:7px 10px;">Missing resource limits or requests — pod can consume
-                        unlimited
-                        resources, destabilising the node.</td>
+                        unlimited resources, destabilising the node.</td>
                 </tr>
                 <tr>
                     <td style="padding:7px 10px; font-weight:600; color:#6c757d;">✅ Right-Sized</td>
-                    <td style="padding:7px 10px;">Requests closely match estimated usage with appropriate
-                        headroom — no
-                        immediate action needed.</td>
+                    <td style="padding:7px 10px;">Requests closely match actual usage with appropriate
+                        headroom — no immediate action needed.</td>
                 </tr>
             </table>
 
             <div
                 style="background:#f0fff4; padding:10px 14px; border-left:4px solid #0f9d58; margin-top:16px; font-size:13px; color:#555; border-radius:4px;">
-                <strong>Suggested Config formula:</strong> <code>cpu_request = estimated_usage × 1.3</code>
+                <strong>Suggested Config formula:</strong> <code>cpu_request = actual_usage × 1.3</code>
                 (30%
                 headroom) · <code>cpu_limit = cpu_request × 2</code> (burst)
             </div>
@@ -4823,24 +4738,26 @@
                     if (data.error) throw new Error(data.error);
                     loading.style.display = 'none';
 
-                    // ── Cost summary cards ────────────────────────
-                    const cur = data.total_current_monthly_cost || 0;
-                    const rec = data.total_recommended_monthly_cost || 0;
-                    const sav = data.total_monthly_saving || 0;
+                    // ── Utilization summary cards ────────────────────────
                     const recs = data.recommendations || [];
 
-                    document.getElementById('opt-current-cost').textContent = '€' + cur.toFixed(2);
-                    document.getElementById('opt-rec-cost').textContent = '€' + rec.toFixed(2);
-                    document.getElementById('opt-saving').textContent = (sav >= 0 ? '€' : '-€') + Math.abs(sav).toFixed(2);
-                    document.getElementById('opt-saving').style.color = sav >= 0 ? '#0f9d58' : '#dc3545';
-                    document.getElementById('opt-saving-card').style.borderLeftColor = sav >= 0 ? '#0f9d58' : '#dc3545';
-                    if (cur > 0) {
-                        const pct = ((sav / cur) * 100).toFixed(1);
-                        document.getElementById('opt-saving-pct').textContent = (sav >= 0 ? '−' : '+') + Math.abs(pct) + '% of current spend';
-                    }
+                    // Calculate average CPU/Memory utilization
+                    let totalCpuUtil = 0, totalMemUtil = 0, cpuCount = 0, memCount = 0;
+                    recs.forEach(r => {
+                        if (r.cpu_utilization_pct != null) { totalCpuUtil += r.cpu_utilization_pct; cpuCount++; }
+                        if (r.mem_utilization_pct != null) { totalMemUtil += r.mem_utilization_pct; memCount++; }
+                    });
+
                     document.getElementById('opt-wl-count').textContent = recs.length;
                     const issues = recs.filter(r => r.type && !r.type.includes('Right-Sized')).length;
                     document.getElementById('opt-wl-issues').textContent = issues > 0 ? `${issues} need attention` : 'all right-sized ✅';
+
+                    const avgCpu = cpuCount > 0 ? (totalCpuUtil / cpuCount).toFixed(0) + '%' : '—';
+                    const avgMem = memCount > 0 ? (totalMemUtil / memCount).toFixed(0) + '%' : '—';
+                    document.getElementById('opt-avg-cpu').textContent = avgCpu;
+                    document.getElementById('opt-avg-mem').textContent = avgMem;
+                    document.getElementById('opt-metrics-src').textContent = data.metrics_source === 'metrics-server' ? '📡 Live' : '🤖 Estimated';
+                    document.getElementById('opt-metrics-note').textContent = data.metrics_source || 'unknown';
                     costRow.style.display = 'flex';
 
                     // ── Gemini badges ─────────────────────────────
@@ -4890,12 +4807,15 @@
                         const curCpu = `<span class="opt-config-box">req: ${rec.current_cpu_request || 'not-set'}</span><span class="opt-config-box">lim: ${rec.current_cpu_limit || 'not-set'}</span>`;
                         const curMem = `<span class="opt-config-box">req: ${rec.current_mem_request || 'not-set'}</span><span class="opt-config-box">lim: ${rec.current_mem_limit || 'not-set'}</span>`;
 
-                        // Billing basis indicator
-                        const basisBadge = rec.billing_basis === 'usage'
-                            ? '<span style="font-size:10px;background:#fd7e14;color:#fff;border-radius:8px;padding:1px 5px;margin-left:4px;">billed:usage</span>'
-                            : rec.billing_basis === 'requests'
-                                ? '<span style="font-size:10px;background:#6c757d;color:#fff;border-radius:8px;padding:1px 5px;margin-left:4px;">billed:requests</span>'
-                                : '';
+                        // Utilization display (no cost/billing)
+                        const cpuUtilPct = rec.cpu_utilization_pct != null ? rec.cpu_utilization_pct : null;
+                        const memUtilPct = rec.mem_utilization_pct != null ? rec.mem_utilization_pct : null;
+                        const cpuBar = cpuUtilPct != null
+                            ? `<div style="display:flex;align-items:center;gap:4px;"><div style="width:60px;height:6px;background:#333;border-radius:3px;overflow:hidden;"><div style="width:${Math.min(cpuUtilPct,100)}%;height:100%;background:${cpuUtilPct>80?'#dc3545':cpuUtilPct>50?'#f4b400':'#0f9d58'};border-radius:3px;"></div></div><span style="font-size:10px;color:${cpuUtilPct>80?'#dc3545':'#aaa'};">${cpuUtilPct.toFixed(0)}%</span></div>`
+                            : '<span style="font-size:10px;color:#666;">—</span>';
+                        const memBar = memUtilPct != null
+                            ? `<div style="display:flex;align-items:center;gap:4px;"><div style="width:60px;height:6px;background:#333;border-radius:3px;overflow:hidden;"><div style="width:${Math.min(memUtilPct,100)}%;height:100%;background:${memUtilPct>80?'#dc3545':memUtilPct>50?'#f4b400':'#0f9d58'};border-radius:3px;"></div></div><span style="font-size:10px;color:${memUtilPct>80?'#dc3545':'#aaa'};">${memUtilPct.toFixed(0)}%</span></div>`
+                            : '<span style="font-size:10px;color:#666;">—</span>';
 
                         // kubectl patch snippet
                         const kubectlSnippet = rec.suggested_cpu_request
@@ -4916,21 +4836,17 @@
                                         <div style="margin-top:2px;">MEM: ${curMem}</div>
                                     </td>
                                     <td>
-                                        <div style="font-size:12px;">CPU: <strong>${rec.actual_usage_cpu || '~unknown'}</strong>${basisBadge}</div>
-                                        <div style="font-size:12px; margin-top:2px;">MEM: <strong>${rec.actual_usage_mem || '~unknown'}</strong></div>
-                                        <div style="font-size:11px;color:#aaa;margin-top:2px;">billable: ${rec.billable_cores != null ? rec.billable_cores.toFixed(3) + ' cores' : '—'}</div>
+                                        <div style="font-size:12px;">CPU: <strong>${rec.actual_usage_cpu || '~unknown'}</strong></div>
+                                        <div style="margin-top:2px;">CPU util: ${cpuBar}</div>
+                                        <div style="font-size:12px; margin-top:4px;">MEM: <strong>${rec.actual_usage_mem || '~unknown'}</strong></div>
+                                        <div style="margin-top:2px;">MEM util: ${memBar}</div>
                                     </td>
                                     <td style="white-space:nowrap;">
                                         <div>CPU: ${sugCpu}</div>
                                         <div style="margin-top:2px;">MEM: ${sugMem}</div>
                                     </td>
-                                    <td>
-                                        <div>Now: <strong>€${(rec.current_monthly_cost || 0).toFixed(2)}</strong></div>
-                                        <div style="margin-top:2px;">After: <strong style="color:#0f9d58;">€${(rec.recommended_monthly_cost || 0).toFixed(2)}</strong></div>
-                                        <div style="margin-top:2px;">${savingHtml}</div>
-                                    </td>
                                     <td style="font-size:12px; max-width:200px; word-break:break-word;">
-                                        <code style="font-size:10px; background:#f0f0f0; padding:2px 4px; border-radius:3px; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${kubectlSnippet}">${kubectlSnippet}</code>
+                                        <code style="font-size:10px; background:var(--bg-surface,#1a1b2e); padding:2px 4px; border-radius:3px; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${kubectlSnippet}">${kubectlSnippet}</code>
                                         <button class="opt-copy-btn" onclick="navigator.clipboard.writeText('${kubectlSnippet.replace(/'/g, '')}')">📋 Copy</button>
                                     </td>
                                 `;

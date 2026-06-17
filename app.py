@@ -1127,8 +1127,6 @@ def ai_optimize():
 
     _optimizer_start = time.time()
 
-    cost_per_core = 60.0  # EUR per core per month (org-specific)
-
     # ── Utility: CPU / Memory parsers ────────────────────────────────────────
     def _parse_cpu_cores(val):
         """Convert CPU string to float cores. Returns 0.0 if not set."""
@@ -1326,11 +1324,7 @@ def ai_optimize():
 
         if not workload_summaries:
             return jsonify({
-                "cost_rate_per_core": cost_per_core, "currency": "EUR",
                 "metrics_source": metrics_source,
-                "total_current_monthly_cost": 0,
-                "total_recommended_monthly_cost": 0,
-                "total_monthly_saving": 0,
                 "summary": "No workloads found in this namespace.",
                 "recommendations": []
             })
@@ -1340,17 +1334,16 @@ def ai_optimize():
               f"{len(raw_workloads)} workloads, {len(pod_metrics_map)} pod metrics, "
               f"inventory={len(inventory_text)} chars")
 
-        # Cap workloads to prevent massive Gemini prompts (>25 workloads = truncated response)
-        MAX_WORKLOADS_FOR_AI = 25
+        MAX_WORKLOADS_FOR_AI = 15
         if len(workload_summaries) > MAX_WORKLOADS_FOR_AI:
             print(f"[optimize] ⚠️  Capping workloads from {len(workload_summaries)} to {MAX_WORKLOADS_FOR_AI} for AI analysis")
             workload_summaries = workload_summaries[:MAX_WORKLOADS_FOR_AI]
             raw_workloads = raw_workloads[:MAX_WORKLOADS_FOR_AI]
             inventory_text = "\n\n".join(workload_summaries)
 
-        # Truncate inventory to prevent token overflow (12K chars ≈ 4K tokens)
-        if len(inventory_text) > 12000:
-            inventory_text = inventory_text[:12000] + "\n\n[... truncated — too many workloads ...]"
+        # Truncate inventory to prevent token overflow (8K chars ≈ 2.5K tokens)
+        if len(inventory_text) > 8000:
+            inventory_text = inventory_text[:8000] + "\n\n[... truncated — too many workloads ...]"
 
         # ── 4-5. Gemini-powered analysis (skipped if AI not configured) ───────
         if get_model():
@@ -1364,15 +1357,7 @@ def ai_optimize():
                 "image name, and engineering heuristics for each workload."
             )
 
-            prompt = f"""You are a senior Kubernetes cost-optimization engineer with the following billing model:
-
-COST MODEL (apply exactly):
-- €{cost_per_core} EUR per CPU core per month
-- billing rule:  billable_cores = max(cpu_requests_cores, actual_cpu_usage_cores)  [per replica]
-  → cpu_requests > actual_usage  →  billing_basis = "requests"  (over-provisioned, wasted spend)
-  → actual_usage > cpu_requests  →  billing_basis = "usage"     (under-provisioned, throttling risk)
-- current_monthly_cost  = billable_cores × {cost_per_core} × replicas
-- Memory is NOT separately billed, but OOM kills cause incidents
+            prompt = f"""You are a senior Kubernetes resource-optimization engineer.
 
 {metrics_note}
 
@@ -1391,13 +1376,8 @@ ESTIMATION HEURISTICS (only when actual_cpu_usage is unknown):
 
 Return ONLY a valid JSON object (no markdown, no explanation):
 {{
-  "cost_rate_per_core": {cost_per_core},
-  "currency": "EUR",
   "metrics_source": "{metrics_source}",
-  "total_current_monthly_cost": <sum of all current_monthly_cost>,
-  "total_recommended_monthly_cost": <sum of all recommended_monthly_cost>,
-  "total_monthly_saving": <total_current - total_recommended>,
-  "summary": "2-3 sentence executive summary of cost and resource posture",
+  "summary": "2-3 sentence executive summary of resource utilization posture",
   "recommendations": [
     {{
       "resource": "<workload name>",
@@ -1407,9 +1387,9 @@ Return ONLY a valid JSON object (no markdown, no explanation):
       "reason": "Explanation referencing specific numbers",
       "actual_usage_cpu": "<e.g. '0.42 cores (measured)' or '~0.05 cores (estimated)'>",
       "actual_usage_mem": "<e.g. '312 MiB (measured)' or '~128 MiB (estimated)'>",
+      "cpu_utilization_pct": <float: actual_cpu / cpu_request * 100>,
+      "mem_utilization_pct": <float: actual_mem / mem_limit * 100>,
       "capacity_headroom_pct": "<% headroom before CPU limit, e.g. '45%' or 'N/A'>",
-      "billable_cores": <float: max(cpu_request, actual_usage) per replica>,
-      "billing_basis": "requests" | "usage",
       "current_cpu_request":  "<value or 'not-set'>",
       "current_cpu_limit":    "<value or 'not-set'>",
       "current_mem_request":  "<value or 'not-set'>",
@@ -1418,9 +1398,6 @@ Return ONLY a valid JSON object (no markdown, no explanation):
       "suggested_cpu_limit":   "<e.g. '500m'>",
       "suggested_mem_request": "<e.g. '256Mi'>",
       "suggested_mem_limit":   "<e.g. '512Mi'>",
-      "current_monthly_cost":     <float: billable_cores × {cost_per_core} × replicas>,
-      "recommended_monthly_cost": <float: suggested_cpu_request_cores × {cost_per_core} × replicas>,
-      "monthly_saving":           <current_monthly_cost - recommended_monthly_cost>,
       "action": "Specific kubectl/YAML change to apply",
       "severity": "high|medium|low",
       "ai_insight": "1 sentence on why this pattern occurs for this workload type"
@@ -1430,13 +1407,13 @@ Return ONLY a valid JSON object (no markdown, no explanation):
 
 Rules:
 - One recommendation per workload, even Right-Sized ones
-- billable_cores = max(cpu_requests_cores_per_replica, actual_cpu_cores_per_replica)
-- If cpu_request is not-set: assume 0 cores — flag Stability Risk
+- cpu_utilization_pct = (actual_cpu_cores / cpu_request_cores) * 100
+- mem_utilization_pct = (actual_mem_mib / mem_limit_mib) * 100
+- If cpu_request is not-set: flag Stability Risk
 - suggested_cpu_request = actual_usage_cores × 1.3  (30% headroom)
 - suggested_cpu_limit   = suggested_cpu_request × 2  (burst headroom)
 - suggested_mem_request = estimated_mem_usage × 1.2  (20% headroom)
 - suggested_mem_limit   = suggested_mem_request × 1.5 (spike headroom)
-- monthly_saving POSITIVE = saving (reducing over-provisioned). NEGATIVE = cost increase (raising under-provisioned).
 - Return ONLY JSON. No markdown. No explanation.
 """
             gemini_start = time.time()
@@ -1444,8 +1421,6 @@ Rules:
             print(f"[optimize] ⏱  Gemini response: {time.time() - gemini_start:.1f}s | "
                   f"{len(response.text)} chars")
             result   = parse_gemini_json(response.text)
-            result.setdefault("cost_rate_per_core", cost_per_core)
-            result.setdefault("currency", "EUR")
             result.setdefault("metrics_source", metrics_source)
             result.setdefault("recommendations", [])
             result.setdefault("summary", "Analysis complete.")
@@ -1477,12 +1452,11 @@ Rules:
     # This code was previously inside `if not get_model():` but now also serves
     # as the fallback when Gemini returns malformed JSON or times out.
     recommendations   = []
-    total_current     = 0.0
-    total_recommended = 0.0
 
     for kind, name, replicas, containers in raw_workloads:
         total_req_cpu     = 0.0
         total_lim_cpu     = 0.0
+        total_req_mem_mib = 0.0
         total_lim_mem_mib = 0.0
         for c in containers:
             res = getattr(c, 'resources', None)
@@ -1490,16 +1464,16 @@ Rules:
             lim = getattr(res, 'limits',   None) or {}
             total_req_cpu     += _parse_cpu_cores(req.get('cpu'))
             total_lim_cpu     += _parse_cpu_cores(lim.get('cpu'))
+            total_req_mem_mib += _parse_mem_mib(req.get('memory'))
             total_lim_mem_mib += _parse_mem_mib(lim.get('memory'))
 
         wm = workload_metrics_map.get(name)
         actual_cpu_per_replica = (wm["cpu_cores"] / max(replicas, 1)) if wm else 0.0
         actual_mem_per_replica = (wm["mem_mib"]   / max(replicas, 1)) if wm else 0.0
 
-        billable_cores = max(total_req_cpu, actual_cpu_per_replica)
-        billing_basis  = "usage" if (wm and actual_cpu_per_replica > total_req_cpu) else "requests"
-        current_cost   = billable_cores * cost_per_core * replicas
-        total_current += current_cost
+        # Calculate utilization percentages
+        cpu_util_pct = (actual_cpu_per_replica / total_req_cpu * 100) if (wm and total_req_cpu > 0) else None
+        mem_util_pct = (actual_mem_per_replica / total_lim_mem_mib * 100) if (wm and total_lim_mem_mib > 0) else None
 
         actual_usage_cpu = (f"{wm['cpu_cores']:.3f} cores (measured)"
                             if wm else "unknown (no metrics server)")
@@ -1516,67 +1490,55 @@ Rules:
             action   = "Set resources.limits.memory: 256Mi"
             severity = "high"
             insight  = "Without limits the scheduler cannot protect other pods on the same node."
-            rec_cost = current_cost
-        elif billing_basis == "usage" and wm:
+        elif wm and actual_cpu_per_replica > total_req_cpu and total_req_cpu > 0:
             rtype    = "Performance Risk \ud83d\udcc8"
             reason   = (f"Actual CPU ({actual_cpu_per_replica:.3f} cores/replica) "
                         f"exceeds request ({total_req_cpu:.3f} cores). "
-                        f"Billed on usage \u2014 throttling risk.")
+                        f"Throttling risk.")
             action   = f"Increase cpu_request to ~{actual_cpu_per_replica*1.3:.3f} cores"
             severity = "high"
             insight  = "Under-provisioned; Kubernetes throttles CPU at the request/limit boundary."
-            rec_cost = actual_cpu_per_replica * 1.3 * cost_per_core * replicas
-        elif billing_basis == "requests" and total_req_cpu > 0 and wm:
+        elif total_req_cpu > 0 and wm:
             save_ratio = max(0, (total_req_cpu - actual_cpu_per_replica) / total_req_cpu)
             if save_ratio > 0.3:
                 rtype    = "Cost Saving \ud83d\udcc9"
                 reason   = (f"CPU request ({total_req_cpu:.3f} cores/replica) is "
                             f"{save_ratio*100:.0f}% above measured usage "
                             f"({actual_cpu_per_replica:.3f} cores). "
-                            f"Billed on requests \u2014 over-provisioned.")
+                            f"Over-provisioned.")
                 action   = f"Reduce cpu_request to ~{actual_cpu_per_replica*1.3:.3f} cores"
                 severity = "medium"
                 insight  = "Right-sizing to usage \u00d7 1.3 reclaims wasted allocation without risk."
-                rec_cost = actual_cpu_per_replica * 1.3 * cost_per_core * replicas
             else:
                 rtype    = "Right-Sized \u2705"
                 reason   = "CPU requests are well-sized relative to actual usage."
                 action   = "No immediate action needed."
                 severity = "low"
                 insight  = "Workload is well proportioned. Review again monthly."
-                rec_cost = current_cost
         else:
             rtype    = "Right-Sized \u2705"
             reason   = "Resource limits configured."
             action   = "Deploy metrics-server or configure AI for deeper analysis."
             severity = "low"
             insight  = "Configure AI or metrics-server for intelligent utilisation estimation."
-            rec_cost = current_cost
 
-        total_recommended += rec_cost
         recommendations.append({
             "resource": name, "kind": kind, "replicas": replicas,
             "type": rtype, "reason": reason,
             "actual_usage_cpu": actual_usage_cpu,
             "actual_usage_mem": actual_usage_mem,
+            "cpu_utilization_pct": round(cpu_util_pct, 1) if cpu_util_pct is not None else None,
+            "mem_utilization_pct": round(mem_util_pct, 1) if mem_util_pct is not None else None,
             "capacity_headroom_pct": headroom_pct,
-            "billable_cores": round(billable_cores, 4),
-            "billing_basis":  billing_basis,
             "current_cpu_request": f"{total_req_cpu:.3f} cores" if total_req_cpu else "not-set",
+            "current_cpu_limit": f"{total_lim_cpu:.3f} cores" if total_lim_cpu else "not-set",
+            "current_mem_request": f"{total_req_mem_mib:.0f}Mi" if total_req_mem_mib else "not-set",
             "current_mem_limit":   "not set" if total_lim_mem_mib == 0 else f"{total_lim_mem_mib:.0f}Mi",
-            "current_monthly_cost":     round(current_cost, 2),
-            "recommended_monthly_cost": round(rec_cost, 2),
-            "monthly_saving":           round(current_cost - rec_cost, 2),
             "action": action, "severity": severity, "ai_insight": insight
         })
 
     fallback_result = {
-        "cost_rate_per_core":             cost_per_core,
-        "currency":                       "EUR",
         "metrics_source":                 metrics_source,
-        "total_current_monthly_cost":     round(total_current, 2),
-        "total_recommended_monthly_cost": round(total_recommended, 2),
-        "total_monthly_saving":           round(total_current - total_recommended, 2),
         "summary": (
             f"Analysed {len(raw_workloads)} workloads via {metrics_source}. "
             "Using spec + measured metrics analysis."
@@ -1723,8 +1685,16 @@ def security_scan():
         sas      = _safe_list(lambda: core_v1.list_namespaced_service_account(namespace).items)
         netpols  = _safe_list(lambda: net_v1.list_namespaced_network_policy(namespace).items)
         rbs      = _safe_list(lambda: rbac_v1.list_namespaced_role_binding(namespace).items)
-        cms      = _safe_list(lambda: core_v1.list_namespaced_config_map(namespace).items)
-        secrets  = _safe_list(lambda: core_v1.list_namespaced_secret(namespace).items)
+
+        # ── Memory guard: skip ConfigMaps/Secrets if namespace is large ──
+        total_workloads = len(deploys) + len(stateful) + len(daemons) + len(jobs)
+        if total_workloads > 50:
+            print(f"[security_scan] Memory guard: skipping ConfigMaps/Secrets ({total_workloads} workloads)")
+            cms     = []
+            secrets = []
+        else:
+            cms      = _safe_list(lambda: core_v1.list_namespaced_config_map(namespace).items)
+            secrets  = _safe_list(lambda: core_v1.list_namespaced_secret(namespace).items)
 
         def _workload_summary(w):
             """Summarise a workload object as compact YAML-like text."""
@@ -1969,7 +1939,7 @@ severity_counts must match the actual counts in the risks array.
 Return ONLY the JSON. No markdown fences. No prose.
 
 === CLUSTER INVENTORY ===
-{full_inventory[:12000]}
+{full_inventory[:8000]}
 """
         # ── Gemini call with retry on malformed JSON ─────────────────────
         result = None
@@ -1992,7 +1962,7 @@ Return ONLY the JSON. No markdown fences. No prose.
                 if _attempt == 0:
                     import time as _t; _t.sleep(2)
                     # Retry with even shorter inventory
-                    prompt = prompt.replace(full_inventory[:12000], full_inventory[:6000])
+                    prompt = prompt.replace(full_inventory[:8000], full_inventory[:4000])
                     continue
                 break  # Give up
 
@@ -2052,12 +2022,12 @@ Return ONLY the JSON. No markdown fences. No prose.
         print(f"[security_scan] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/api/vuln_scan')
 def vuln_scan():
-    """OSS Vulnerability Scan powered by Trivy.
+    """OSS Vulnerability Scan — DISABLED.
 
-    Collects unique container images from the namespace, runs Trivy against each
+    CVE/vulnerability scanning is now handled by the dedicated pipeline system.
+    This endpoint is kept as a stub to return a clear message to any callers.
     image, aggregates CVE findings, and optionally adds a Gemini AI summary.
 
     Falls back to lightweight image metadata checks if Trivy is not installed.
@@ -2074,6 +2044,15 @@ def vuln_scan():
                         cve_references, ai_insight } ]
         }
     """
+    # ── DISABLED: Vulnerability scanning handled by dedicated pipeline system ──
+    return jsonify({
+        'error': 'Vulnerability scanning has been moved to the dedicated pipeline system.',
+        'message': 'This endpoint is deprecated. CVE scanning is now handled externally.',
+        'risks': [],
+        'severity_counts': {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 0}
+    }), 410
+
+    # ── LEGACY CODE BELOW (unreachable) ──
     import subprocess, shutil
 
     namespace = request.args.get('namespace', os.getenv('POD_NAMESPACE', 'default'))
