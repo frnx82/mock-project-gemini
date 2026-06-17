@@ -5908,10 +5908,23 @@
                 }
 
                 const container = document.getElementById(`workloads-${type}`);
+
+                // Always show search bar (even if no data yet)
+                const searchHtml = `<div style="margin-bottom:10px;">
+                    <input type="text" id="wl-search-${type}" placeholder="Search ${type}s..." oninput="filterWorkloadTable('${type}')" 
+                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:13px;outline:none;transition:border-color 0.2s;"
+                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor=''">
+                </div>`;
+
                 if (items.length === 0) {
-                    container.innerHTML = (currentFilter && currentFilter.target === type)
+                    container.innerHTML = searchHtml + ((currentFilter && currentFilter.target === type)
                         ? '<p>No resources found matching filter.</p>'
-                        : '<p>No resources found.</p>';
+                        : '<p>No resources found.</p>');
+                    // Restore search term if it was saved
+                    if (savedSearchTerms[type]) {
+                        const inp = document.getElementById(`wl-search-${type}`);
+                        if (inp) inp.value = savedSearchTerms[type];
+                    }
                     return;
                 }
 
@@ -5921,11 +5934,7 @@
                     : '<th>Status</th><th>Ready</th>';
                 const labelsHeader = isDeployment ? '<th>Labels</th>' : '';
 
-                let html = `<div style="margin-bottom:10px;">
-                    <input type="text" id="wl-search-${type}" placeholder="Search ${type}s..." oninput="filterWorkloadTable('${type}')" 
-                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid #2a2b45;background:#1a1b2e;color:#e2e4e9;font-size:13px;outline:none;transition:border-color 0.2s;"
-                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#2a2b45'">
-                </div>
+                let html = searchHtml + `
                 <table><thead><tr><th>Name</th>${statusHeader}${labelsHeader}<th>Age</th><th>Actions</th></tr></thead><tbody>`;
 
                 items.forEach(item => {
@@ -6051,13 +6060,14 @@
             });
 
             // ── Services ──────────────────────────────────────────────
-            const svcContainer = document.getElementById('networking-Service');
-            if (services.length > 0) {
-                let html = `<div style="margin-bottom:10px;">
+            const svcSearchHtml = `<div style="margin-bottom:10px;">
                     <input type="text" id="net-search-Service" placeholder="Search Services..." oninput="filterNetworkTable('Service')" 
-                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid #2a2b45;background:#1a1b2e;color:#e2e4e9;font-size:13px;outline:none;transition:border-color 0.2s;"
-                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#2a2b45'">
-                </div>
+                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:13px;outline:none;transition:border-color 0.2s;"
+                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor=''">
+                </div>`;
+
+            if (services.length > 0) {
+                let html = svcSearchHtml + `
                 <table><thead><tr><th>Name</th><th>Type</th><th>Cluster IP</th><th>Ports</th><th>Age</th><th>Actions</th></tr></thead><tbody>`;
                 html += services.map(s => {
                     const typeBadge = {
@@ -6087,17 +6097,19 @@
                     if (inp) { inp.value = savedNetSearch['Service']; filterNetworkTable('Service'); }
                 }
             } else {
-                svcContainer.innerHTML = '<p>No Services found.</p>';
+                svcContainer.innerHTML = svcSearchHtml + '<p>No Services found.</p>';
             }
 
             // ── VirtualServices ───────────────────────────────────────
             const vsContainer = document.getElementById('networking-VirtualService');
-            if (virtualServices.length > 0) {
-                let html = `<div style="margin-bottom:10px;">
+            const vsSearchHtml = `<div style="margin-bottom:10px;">
                     <input type="text" id="net-search-VirtualService" placeholder="Search VirtualServices..." oninput="filterNetworkTable('VirtualService')" 
-                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid #2a2b45;background:#1a1b2e;color:#e2e4e9;font-size:13px;outline:none;transition:border-color 0.2s;"
-                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#2a2b45'">
-                </div>
+                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:13px;outline:none;transition:border-color 0.2s;"
+                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor=''">
+                </div>`;
+
+            if (virtualServices.length > 0) {
+                let html = vsSearchHtml + `
                 <table><thead><tr><th>Name</th><th>Hosts</th><th>Gateways</th><th>Age</th><th>Actions</th></tr></thead><tbody>`;
                 html += virtualServices.map(vs => {
                     let hosts = Array.isArray(vs.hosts) ? vs.hosts : (String(vs.hosts).includes(',') ? String(vs.hosts).split(',') : [vs.hosts]);
@@ -6126,7 +6138,7 @@
                     if (inp) { inp.value = savedNetSearch['VirtualService']; filterNetworkTable('VirtualService'); }
                 }
             } else {
-                vsContainer.innerHTML = '<p>No VirtualServices found. VirtualServices provide advanced traffic management (retries, canary, fault injection) for your services.</p>';
+                vsContainer.innerHTML = vsSearchHtml + '<p>No VirtualServices found. VirtualServices provide advanced traffic management (retries, canary, fault injection) for your services.</p>';
             }
         }
         function holes(v) { return Array.isArray(v) ? v.join(',') : String(v || ''); }
