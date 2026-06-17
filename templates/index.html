@@ -4751,7 +4751,10 @@
 
         function switchMainTab(tab) {
             // Persist active tab in URL hash so page refresh restores it
-            try { history.replaceState(null, '', '#tab=' + tab); } catch (e) { }
+            // Preserve existing sub-tab when switching main tabs
+            const existingSub = (window.location.hash.match(/[#&]sub=([^&]+)/) || [])[1] || '';
+            const subPart = existingSub ? '&sub=' + existingSub : '';
+            try { history.replaceState(null, '', '#tab=' + tab + subPart); } catch (e) { }
 
             const workloadsBtn = document.getElementById('main-tab-workloads');
             const networkingBtn = document.getElementById('main-tab-networking');
@@ -5873,9 +5876,11 @@
 
             if (tabsContainer.children.length === 0) {
                 const types = ['Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'Pod', 'ConfigMap', 'Secret'];
+                // Restore sub-tab from URL hash if present
+                const savedSub = (window.location.hash.match(/[#&]sub=([^&]+)/) || [])[1] || '';
                 let tabBtns = '', contentDivs = '';
                 types.forEach((type, index) => {
-                    const active = index === 0 ? 'active' : '';
+                    const active = savedSub ? (type === savedSub ? 'active' : '') : (index === 0 ? 'active' : '');
                     tabBtns += `<button class="tab-btn ${active}" onclick="switchTab('workloads','${type}')">${type}s</button>`;
                     contentDivs += `<div id="workloads-${type}" class="tab-content ${active}"></div>`;
                 });
@@ -6025,9 +6030,10 @@
             // Only render tabs once
             if (tabsContainer.children.length === 0) {
                 const types = ['Service', 'VirtualService'];
+                const savedSub = (window.location.hash.match(/[#&]sub=([^&]+)/) || [])[1] || '';
                 let tabBtns = '', contentDivs = '';
                 types.forEach((type, index) => {
-                    const isActive = index === 0 ? 'active' : '';
+                    const isActive = savedSub ? (type === savedSub ? 'active' : '') : (index === 0 ? 'active' : '');
                     tabBtns += `<button class="tab-btn ${isActive}" onclick="switchTab('networking','${type}')">${type}s</button>`;
                     contentDivs += `<div id="networking-${type}" class="tab-content ${isActive}"></div>`;
                 });
@@ -6140,6 +6146,10 @@
         function switchTab(panel, type) {
             const tabsContainer = document.getElementById(`${panel}-tabs`);
             const contentContainer = document.getElementById(`${panel}-content`);
+
+            // Persist sub-tab in URL hash
+            const mainTab = (window.location.hash.match(/[#&]tab=([^&]+)/) || [])[1] || 'workloads';
+            try { history.replaceState(null, '', '#tab=' + mainTab + '&sub=' + type); } catch (e) { }
 
             // Update buttons
             Array.from(tabsContainer.children).forEach(btn => {
