@@ -159,11 +159,19 @@ def _cache_acquire(key):
     Returns True if this thread should make the Gemini call.
     Returns False if another thread is already making the call
     (caller should re-check cache after a brief wait).
+
+    Safety: locks auto-expire after 120s to prevent permanent lock-up
+    if a request crashes without releasing the lock.
     """
     with _ai_inflight_lock:
         if key in _ai_inflight:
+            # Auto-expire stale locks (>120s) — safety net
+            if time.time() - _ai_inflight[key] > 120:
+                print(f"[cache] Auto-expired stale lock for {key}")
+                _ai_inflight[key] = time.time()
+                return True
             return False  # Another thread is already calling Gemini
-        _ai_inflight[key] = True
+        _ai_inflight[key] = time.time()
         return True
 
 def _cache_release(key):
@@ -1323,11 +1331,13 @@ def ai_optimize():
             print(f"[optimize] jobs: {e}")
 
         if not workload_summaries:
-            return jsonify({
+            no_wl_result = {
                 "metrics_source": metrics_source,
                 "summary": "No workloads found in this namespace.",
                 "recommendations": []
-            })
+            }
+            _cache_set(cache_key, no_wl_result)
+            return jsonify(no_wl_result)
 
         inventory_text = "\n\n".join(workload_summaries)
         print(f"[optimize] ⏱  K8s data collection: {time.time() - _optimizer_start:.1f}s | "
