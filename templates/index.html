@@ -6131,7 +6131,7 @@
                     // Name cell — clickable for Deployment/StatefulSet to navigate to related pods
                     let nameCell;
                     if (type === 'Deployment' || type === 'StatefulSet') {
-                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:#818cf8;text-decoration:none;cursor:pointer;" title="View pods for ${item.name}">🔗 ${item.name}</a></td>`;
+                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:#818cf8;text-decoration:none;cursor:pointer;" title="View pods for ${item.name}">${item.name}</a></td>`;
                     } else {
                         nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;">${item.name}</td>`;
                     }
