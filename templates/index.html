@@ -4948,8 +4948,8 @@
                     // Calculate average CPU/Memory utilization
                     let totalCpuUtil = 0, totalMemUtil = 0, cpuCount = 0, memCount = 0;
                     recs.forEach(r => {
-                        if (r.cpu_utilization_pct != null) { totalCpuUtil += r.cpu_utilization_pct; cpuCount++; }
-                        if (r.mem_utilization_pct != null) { totalMemUtil += r.mem_utilization_pct; memCount++; }
+                        if (r.cpu_utilization_pct != null) { const v = parseFloat(r.cpu_utilization_pct); if (Number.isFinite(v)) { totalCpuUtil += v; cpuCount++; } }
+                        if (r.mem_utilization_pct != null) { const v = parseFloat(r.mem_utilization_pct); if (Number.isFinite(v)) { totalMemUtil += v; memCount++; } }
                     });
 
                     document.getElementById('opt-wl-count').textContent = recs.length;
@@ -4993,7 +4993,7 @@
                     recs.forEach(rec => {
                         const typeKey = Object.keys(typeColor).find(k => (rec.type || '').includes(k)) || 'Right-Sized';
                         const color = typeColor[typeKey] || '#888';
-                        const saving = rec.monthly_saving || 0;
+                        const saving = parseFloat(rec.monthly_saving) || 0;
                         const savingHtml = saving === 0
                             ? '<span style="color:#aaa;">€0</span>'
                             : saving > 0
@@ -5012,12 +5012,12 @@
                         const curMem = `<span class="opt-config-box">req: ${rec.current_mem_request || 'not-set'}</span><span class="opt-config-box">lim: ${rec.current_mem_limit || 'not-set'}</span>`;
 
                         // Utilization display (no cost/billing)
-                        const cpuUtilPct = rec.cpu_utilization_pct != null ? rec.cpu_utilization_pct : null;
-                        const memUtilPct = rec.mem_utilization_pct != null ? rec.mem_utilization_pct : null;
-                        const cpuBar = cpuUtilPct != null
+                        const cpuUtilPct = rec.cpu_utilization_pct != null ? parseFloat(rec.cpu_utilization_pct) : null;
+                        const memUtilPct = rec.mem_utilization_pct != null ? parseFloat(rec.mem_utilization_pct) : null;
+                        const cpuBar = cpuUtilPct != null && Number.isFinite(cpuUtilPct)
                             ? `<div style="display:flex;align-items:center;gap:4px;"><div style="width:60px;height:6px;background:#333;border-radius:3px;overflow:hidden;"><div style="width:${Math.min(cpuUtilPct,100)}%;height:100%;background:${cpuUtilPct>80?'#dc3545':cpuUtilPct>50?'#f4b400':'#0f9d58'};border-radius:3px;"></div></div><span style="font-size:10px;color:${cpuUtilPct>80?'#dc3545':'#aaa'};">${cpuUtilPct.toFixed(0)}%</span></div>`
                             : '<span style="font-size:10px;color:#666;">—</span>';
-                        const memBar = memUtilPct != null
+                        const memBar = memUtilPct != null && Number.isFinite(memUtilPct)
                             ? `<div style="display:flex;align-items:center;gap:4px;"><div style="width:60px;height:6px;background:#333;border-radius:3px;overflow:hidden;"><div style="width:${Math.min(memUtilPct,100)}%;height:100%;background:${memUtilPct>80?'#dc3545':memUtilPct>50?'#f4b400':'#0f9d58'};border-radius:3px;"></div></div><span style="font-size:10px;color:${memUtilPct>80?'#dc3545':'#aaa'};">${memUtilPct.toFixed(0)}%</span></div>`
                             : '<span style="font-size:10px;color:#666;">—</span>';
 
