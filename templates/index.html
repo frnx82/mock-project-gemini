@@ -1100,6 +1100,7 @@
         body.light-mode .opt-cost-card {
             background: #ffffff !important;
             border-color: #dde1e8 !important;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
 
         body.light-mode .opt-cost-label {
@@ -1111,7 +1112,32 @@
         }
 
         body.light-mode .opt-cost-sub {
-            color: #8b8fa3 !important;
+            color: #6b7280 !important;
+        }
+
+        /* ── Optimizer header panel ────────────────────────────── */
+        body.light-mode #view-optimizer .panel-header,
+        body.light-mode #view-optimizer [style*="background:#1a1b2e"] {
+            background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
+            color: #ffffff !important;
+            border-color: #4338ca !important;
+        }
+
+        body.light-mode #view-optimizer .panel-header span {
+            color: #ffffff !important;
+        }
+
+        /* ── Optimizer AI-Powered / AI Estimation badges ────────── */
+        body.light-mode #opt-gemini-badge {
+            background: rgba(255,255,255,0.3) !important;
+            color: #ffffff !important;
+            font-weight: 600;
+        }
+
+        body.light-mode #opt-source-badge {
+            background: rgba(255,255,255,0.25) !important;
+            color: #ffffff !important;
+            font-weight: 600;
         }
 
         /* ── Optimizer summary card ─────────────────────────────── */
@@ -1126,8 +1152,9 @@
 
         /* ── Optimizer config badges (monospace req/lim boxes) ─── */
         body.light-mode .opt-config-box {
-            background: #f0f1f5 !important;
+            background: #eef0f4 !important;
             color: #1a1c24 !important;
+            border: 1px solid #dde1e8;
         }
 
         /* ── Optimizer insight rows ─────────────────────────────── */
@@ -1149,6 +1176,77 @@
             color: #fff !important;
         }
 
+        /* ── Optimizer copy button ──────────────────────────────── */
+        body.light-mode .opt-copy-btn {
+            background: #e8ecf1 !important;
+            color: #4a5568 !important;
+            border: 1px solid #dde1e8;
+        }
+
+        body.light-mode .opt-copy-btn:hover {
+            background: #d1d5de !important;
+            color: #1a1c24 !important;
+        }
+
+        /* ── Optimizer table overrides ──────────────────────────── */
+        body.light-mode #view-optimizer table th {
+            background: #f0f1f5 !important;
+            color: #4a5568 !important;
+            border-color: #dde1e8 !important;
+        }
+
+        body.light-mode #view-optimizer table td {
+            color: #1a1c24 !important;
+            border-color: #e5e7eb !important;
+        }
+
+        body.light-mode #view-optimizer table tr:hover td {
+            background: #f8f9fb !important;
+        }
+
+        /* ── Optimizer inline type/category badges ──────────────── */
+        body.light-mode #view-optimizer td[style*="color:#22c55e"] {
+            color: #16a34a !important;
+        }
+
+        body.light-mode #view-optimizer td[style*="color:#f59e0b"] {
+            color: #d97706 !important;
+        }
+
+        /* ── Optimizer stat cards container ─────────────────────── */
+        body.light-mode #opt-cost-row {
+            background: #f8f9fb !important;
+        }
+
+        /* ── Optimizer progress bar tracks (inline bg:#333) ──────── */
+        body.light-mode #view-optimizer [style*="background:#333"] {
+            background: #e0e3e8 !important;
+        }
+
+        /* ── Optimizer code/kubectl snippets ──────────────────────── */
+        body.light-mode #view-optimizer code {
+            background: #eef0f4 !important;
+            color: #374151 !important;
+            border: 1px solid #dde1e8;
+        }
+
+        /* ── Optimizer inline muted text (color:#888, #aaa, #666) ── */
+        body.light-mode #view-optimizer span[style*="color:#888"],
+        body.light-mode #view-optimizer span[style*="color:#aaa"] {
+            color: #6b7280 !important;
+        }
+
+        body.light-mode #view-optimizer span[style*="color:#666"] {
+            color: #6b7280 !important;
+        }
+
+        /* ── Optimizer badge: AI Estimation text near header ──────── */
+        body.light-mode #opt-source-badge {
+            background: rgba(255,255,255,0.35) !important;
+            color: #ffffff !important;
+            font-weight: 600;
+        }
+
         /* ── Remaining inline dark backgrounds catch-all ────────── */
         body.light-mode [style*="background:#1a1a2e"],
         body.light-mode [style*="background: #1a1a2e"],
@@ -1157,7 +1255,13 @@
         body.light-mode [style*="background:#1e1e2e"],
         body.light-mode [style*="background: #1e1e2e"],
         body.light-mode [style*="background:#1e1e1e"],
-        body.light-mode [style*="background: #1e1e1e"] {
+        body.light-mode [style*="background: #1e1e1e"],
+        body.light-mode [style*="background:#0f1117"],
+        body.light-mode [style*="background: #0f1117"],
+        body.light-mode [style*="background:#1e1f35"],
+        body.light-mode [style*="background: #1e1f35"],
+        body.light-mode [style*="background:#1a1b2e"],
+        body.light-mode [style*="background: #1a1b2e"] {
             background: #f0f1f5 !important;
             color: #1a1c24 !important;
         }
@@ -1171,6 +1275,28 @@
         body.light-mode [style*="background:linear-gradient(135deg,#1a2e1a,#1e3a1e)"] {
             background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
             color: #065f46 !important;
+        }
+
+        /* ── Optimizer header: MUST come after catch-all to override ─ */
+        body.light-mode #view-optimizer > .panel > .panel-header {
+            background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
+            color: #ffffff !important;
+            border-color: #4338ca !important;
+        }
+
+        body.light-mode #view-optimizer > .panel > .panel-header span,
+        body.light-mode #view-optimizer > .panel > .panel-header button {
+            color: #ffffff !important;
+        }
+
+        body.light-mode #opt-gemini-badge {
+            background: rgba(255,255,255,0.3) !important;
+            color: #ffffff !important;
+        }
+
+        body.light-mode #opt-source-badge {
+            background: rgba(255,255,255,0.3) !important;
+            color: #ffffff !important;
         }
 
         /* ── AI toast & remaining text overrides ──────────────── */
