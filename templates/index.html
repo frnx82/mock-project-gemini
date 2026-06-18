@@ -7676,7 +7676,6 @@
         async function openSelfHeal(name, kind, status) {
             const ns = document.getElementById('namespace-select').value;
             const riskColors = { low: '#28a745', medium: '#e6a000', high: '#dc3545' };
-            const riskBg = { low: '#d4edda', medium: '#fff3cd', high: '#f8d7da' };
             const statusIcons = {
                 CrashLoopBackOff: '💥', OOMKilled: '🧠', ImagePullBackOff: '🖼️',
                 ErrImagePull: '🔐', Pending: '⏳', Failed: '❌',
@@ -7690,33 +7689,35 @@
                 const riskBadge = '<span class="heal-risk-badge heal-risk-' + rl + '">' + rl.toUpperCase() + ' RISK</span>';
                 const confColor = conf >= 80 ? '#28a745' : conf >= 60 ? '#e6a000' : '#dc3545';
                 const hints = (d.kubectl_hints || []).map(h =>
-                    '<div style="font-size:11px;color:#444;background:#f5f5f5;padding:4px 8px;border-radius:4px;font-family:monospace;margin-bottom:3px;">' + h + '</div>'
+                    '<div style="font-size:11px;color:var(--text-secondary,#c9d1d9);background:var(--bg-surface,#1e1e2e);padding:6px 10px;border-radius:6px;font-family:monospace;margin-bottom:3px;border:1px solid var(--border-color,#30363d);cursor:pointer;" onclick="navigator.clipboard.writeText(this.innerText);showToast(\'📋 Copied!\',true);" title="Click to copy">' + h + '</div>'
                 ).join('');
 
                 // store context for execute
                 window._healCtx = { name, kind, action: d.action, ns, status };
 
-                return '<div style="margin-bottom:14px;padding:12px 16px;background:' + riskBg[rl] + ';border-radius:10px;border-left:4px solid ' + riskColors[rl] + ';">'
+                return '<div style="margin-bottom:14px;padding:12px 16px;background:var(--bg-surface,#1a1b2e);border-radius:10px;border-left:4px solid ' + riskColors[rl] + ';">'
                     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-                    + '<div style="font-size:13px;font-weight:700;color:#333;">Root Cause</div>'
+                    + '<div style="font-size:13px;font-weight:700;color:var(--text-primary,#e2e8f0);">Root Cause</div>'
                     + '<div style="display:flex;align-items:center;gap:8px;">'
                     + riskBadge
                     + '<span style="font-size:12px;font-weight:700;color:' + confColor + ';">' + conf + '% confidence</span>'
                     + '</div></div>'
-                    + '<div style="font-size:13px;color:#444;line-height:1.6;">' + _mdLite(d.root_cause || '') + '</div>'
-                    + (d.details ? '<div style="font-size:11px;color:#666;margin-top:6px;font-style:italic;">' + d.details + '</div>' : '')
+                    + '<div style="font-size:13px;color:var(--text-secondary,#cbd5e1);line-height:1.6;">' + _mdLite(d.root_cause || '') + '</div>'
+                    + (d.details ? '<div style="font-size:11px;color:var(--text-muted,#94a3b8);margin-top:6px;font-style:italic;">' + d.details + '</div>' : '')
                     + '</div>'
 
-                    + '<div style="background:#f8f9fa;border-radius:8px;padding:10px 14px;margin-bottom:12px;">'
-                    + '<div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Proposed Fix</div>'
-                    + '<div style="font-size:12px;color:#333;font-family:monospace;background:#fff;padding:6px 10px;border-radius:6px;border:1px solid #e0e0e0;word-break:break-all;">' + (d.patch_preview || '') + '</div>'
+                    + '<div style="background:var(--bg-surface,#1a1b2e);border-radius:8px;padding:10px 14px;margin-bottom:12px;border:1px solid var(--border-color,#30363d);">'
+                    + '<div style="font-size:11px;font-weight:700;color:var(--text-muted,#8b8fa3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Proposed Fix</div>'
+                    + '<div style="font-size:12px;color:var(--text-secondary,#c9d1d9);font-family:monospace;background:var(--bg-deep,#0f1117);padding:6px 10px;border-radius:6px;border:1px solid var(--border-color,#30363d);word-break:break-all;">' + (d.patch_preview || '') + '</div>'
                     + '</div>'
 
-                    + (hints ? '<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">kubectl hints</div>' + hints + '</div>' : '')
+                    + (hints ? '<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:700;color:var(--text-muted,#8b8fa3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">kubectl hints</div>' + hints + '</div>' : '')
+
+                    + '<div id="heal-result-area" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:8px;font-size:13px;"></div>'
 
                     + '<div style="display:flex;gap:8px;margin-top:4px;">'
-                    + '<button onclick="executeSelfHeal(false)" style="flex:1;padding:9px 0;background:linear-gradient(135deg,#dc3545,#e6a000);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✅ Apply Fix — ' + (d.action_label || d.action) + '</button>'
-                    + '<button onclick="executeSelfHeal(true)"  style="padding:9px 18px;background:#f0f0f0;color:#333;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">🧪 Dry Run</button>'
+                    + '<button id="heal-apply-btn" onclick="executeSelfHeal(false)" style="flex:1;padding:9px 0;background:linear-gradient(135deg,#dc3545,#e6a000);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✅ Apply Fix — ' + (d.action_label || d.action) + '</button>'
+                    + '<button id="heal-dry-btn" onclick="executeSelfHeal(true)"  style="padding:9px 18px;background:var(--bg-surface,#2d2d3d);color:var(--text-primary,#e2e8f0);border:1px solid var(--border-color,#555);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">🧪 Dry Run</button>'
                     + '</div>';
             });
 
@@ -7732,8 +7733,15 @@
         async function executeSelfHeal(dryRun) {
             const ctx = window._healCtx;
             if (!ctx) return;
-            const label = dryRun ? 'Dry Run' : 'Applying fix';
-            showToast('⏳ ' + label + ' for ' + ctx.name + '…', false);
+            const label = dryRun ? '🧪 Dry Run' : '✅ Applying fix';
+            const resultArea = document.getElementById('heal-result-area');
+            const applyBtn = document.getElementById('heal-apply-btn');
+            const dryBtn = document.getElementById('heal-dry-btn');
+
+            // Show loading state in the buttons
+            if (dryRun && dryBtn) { dryBtn.disabled = true; dryBtn.textContent = '⏳ Running...'; }
+            if (!dryRun && applyBtn) { applyBtn.disabled = true; applyBtn.textContent = '⏳ Applying...'; }
+
             try {
                 const r = await fetch('/api/heal/execute', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -7744,14 +7752,49 @@
                     })
                 });
                 const d = await r.json();
-                if (d.error) { showToast('❌ ' + d.error, false); return; }
-                if (dryRun) {
-                    showToast('🧪 ' + d.message, false);
+                if (d.error) {
+                    if (resultArea) {
+                        resultArea.style.display = 'block';
+                        resultArea.style.background = 'rgba(220,53,69,0.15)';
+                        resultArea.style.border = '1px solid #dc3545';
+                        resultArea.style.color = '#ff6b6b';
+                        resultArea.innerHTML = '❌ ' + d.error;
+                    }
+                    showToast('❌ ' + d.error, false);
+                } else if (dryRun) {
+                    if (resultArea) {
+                        resultArea.style.display = 'block';
+                        resultArea.style.background = 'rgba(40,167,69,0.1)';
+                        resultArea.style.border = '1px solid #28a745';
+                        resultArea.style.color = '#66d9a0';
+                        resultArea.innerHTML = '🧪 ' + (d.message || 'Dry run completed successfully.');
+                    }
+                    showToast('🧪 ' + d.message, true);
                 } else {
+                    if (resultArea) {
+                        resultArea.style.display = 'block';
+                        resultArea.style.background = 'rgba(40,167,69,0.15)';
+                        resultArea.style.border = '1px solid #28a745';
+                        resultArea.style.color = '#66d9a0';
+                        resultArea.innerHTML = '✅ ' + (d.message || 'Fix applied successfully!');
+                    }
                     showToast('✅ ' + d.message, true);
                     setTimeout(fetchData, 2500);
                 }
-            } catch (e) { showToast('❌ Execute failed: ' + e.message, false); }
+            } catch (e) {
+                if (resultArea) {
+                    resultArea.style.display = 'block';
+                    resultArea.style.background = 'rgba(220,53,69,0.15)';
+                    resultArea.style.border = '1px solid #dc3545';
+                    resultArea.style.color = '#ff6b6b';
+                    resultArea.innerHTML = '❌ Execute failed: ' + e.message;
+                }
+                showToast('❌ Execute failed: ' + e.message, false);
+            } finally {
+                // Restore buttons
+                if (dryBtn) { dryBtn.disabled = false; dryBtn.textContent = '🧪 Dry Run'; }
+                if (applyBtn) { applyBtn.disabled = false; applyBtn.innerHTML = '✅ Apply Fix — ' + (ctx.action || 'restart'); }
+            }
         }
 
         // Init — restore active tab from URL hash if present (e.g. #tab=networking)
