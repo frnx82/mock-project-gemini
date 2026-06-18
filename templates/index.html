@@ -3077,7 +3077,7 @@
                 <div style="display:flex;align-items:center;gap:8px;">
                     <button class="btn btn-secondary" onclick="openOptimizerHelp()"
                         style="border-radius:50%; width:28px; height:28px; padding:0; line-height:28px; text-align:center; font-size:14px; border:1px solid rgba(255,255,255,0.4); background:rgba(255,255,255,0.1); color:#fff;">?</button>
-                    <button class="btn btn-primary" onclick="renderOptimizer()"
+                    <button class="btn btn-primary" onclick="renderOptimizer(true)"
                         style="background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.4); color:#fff;">🔄
                         Run Analysis</button>
                 </div>
@@ -3266,7 +3266,7 @@
                     <button class="btn btn-secondary"
                         onclick="document.getElementById('securityHelpModal').style.display='block'"
                         style="margin-right: 10px; border-radius: 50%; width: 32px; height: 32px; padding: 0; line-height: 32px; text-align: center;">?</button>
-                    <button class="btn btn-primary" onclick="renderSecurity()">🔍 Run Full Scan</button>
+                    <button class="btn btn-primary" onclick="renderSecurity(true)">🔍 Run Full Scan</button>
                 </div>
             </div>
 
@@ -4919,7 +4919,13 @@
             }
         }
 
-        function renderOptimizer() {
+        // ── Background scan cache ────────────────────────────────────
+        // Stores results so the user can navigate away during long scans
+        // and come back to see results instantly.
+        window._bgScanCache = window._bgScanCache || { optimizer: null, security: null };
+        window._bgScanInFlight = window._bgScanInFlight || { optimizer: false, security: false };
+
+        function renderOptimizer(forceRefresh) {
             const loading = document.getElementById('opt-loading');
             const tbody = document.getElementById('opt-table-body');
             const costRow = document.getElementById('opt-cost-row');
@@ -4927,11 +4933,28 @@
             const filterRow = document.getElementById('opt-filter-row');
             const currentNamespace = document.getElementById('namespace-select').value;
 
+            // If we have cached results and not forcing refresh, render from cache
+            if (!forceRefresh && window._bgScanCache.optimizer && window._bgScanCache.optimizer.ns === currentNamespace) {
+                loading.style.display = 'none';
+                _renderOptimizerData(window._bgScanCache.optimizer.data);
+                return;
+            }
+
+            // If already in-flight, just show loading state
+            if (window._bgScanInFlight.optimizer) {
+                loading.style.display = 'block';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:16px;">🤖 AI is analysing your workloads... You can navigate to other tabs — results will be ready when you return.</td></tr>';
+                return;
+            }
+
             loading.style.display = 'block';
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:16px;">🤖 AI is analysing your workloads...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:16px;">🤖 AI is analysing your workloads... You can navigate to other tabs.</td></tr>';
             costRow.style.display = 'none';
             summaryCard.style.display = 'none';
             filterRow.style.display = 'none';
+            window._bgScanInFlight.optimizer = true;
+
+            showToast('⏳ Resource Optimizer scan started — you can navigate to other tabs while it runs.', true);
 
             fetch(`/api/ai/optimize?namespace=${currentNamespace}`)
                 .then(r => {
@@ -4940,7 +4963,35 @@
                 })
                 .then(data => {
                     if (data.error) throw new Error(data.error);
-                    loading.style.display = 'none';
+                    window._bgScanInFlight.optimizer = false;
+                    window._bgScanCache.optimizer = { data: data, ns: currentNamespace, ts: Date.now() };
+
+                    // If user is still on / returned to optimizer tab, render immediately
+                    const isOnTab = document.getElementById('view-optimizer') && document.getElementById('view-optimizer').style.display !== 'none';
+                    if (isOnTab) {
+                        loading.style.display = 'none';
+                        _renderOptimizerData(data);
+                    }
+                    showToast('✅ Resource Optimizer scan complete! ' + (data.recommendations || []).length + ' workloads analyzed.', true);
+                })
+                .catch(e => {
+                    window._bgScanInFlight.optimizer = false;
+                    const isOnTab = document.getElementById('view-optimizer') && document.getElementById('view-optimizer').style.display !== 'none';
+                    if (isOnTab) {
+                        loading.style.display = 'none';
+                        tbody.innerHTML = `<tr><td colspan="7" style="color:red;padding:16px;">Error: ${e.message}</td></tr>`;
+                    }
+                    showToast('❌ Optimizer scan failed: ' + e.message, false);
+                });
+        }
+
+        function _renderOptimizerData(data) {
+            const tbody = document.getElementById('opt-table-body');
+            const costRow = document.getElementById('opt-cost-row');
+            const summaryCard = document.getElementById('opt-summary-card');
+            const filterRow = document.getElementById('opt-filter-row');
+            const loading = document.getElementById('opt-loading');
+            loading.style.display = 'none';
 
                     // ── Utilization summary cards ────────────────────────
                     const recs = data.recommendations || [];
@@ -5072,11 +5123,6 @@
                     if (recs.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;">✅ No optimization opportunities found. Resources are well-sized!</td></tr>';
                     }
-                })
-                .catch(e => {
-                    loading.style.display = 'none';
-                    tbody.innerHTML = `<tr><td colspan="7" style="color:red;padding:16px;">Error: ${e.message}</td></tr>`;
-                });
         }
 
         function filterOptType(btn, type) {
@@ -5087,7 +5133,7 @@
             });
         }
 
-        function renderSecurity() {
+        function renderSecurity(forceRefresh) {
             const loading = document.getElementById('sec-loading');
             const tbody = document.getElementById('sec-table-body');
             const summaryCard = document.getElementById('sec-summary-card');
@@ -5095,11 +5141,28 @@
             const catFilters = document.getElementById('sec-cat-filters');
             const currentNamespace = document.getElementById('namespace-select').value;
 
+            // If we have cached results and not forcing refresh, render from cache
+            if (!forceRefresh && window._bgScanCache.security && window._bgScanCache.security.ns === currentNamespace) {
+                loading.style.display = 'none';
+                _renderSecurityData(window._bgScanCache.security.data);
+                return;
+            }
+
+            // If already in-flight, just show loading state
+            if (window._bgScanInFlight.security) {
+                loading.style.display = 'block';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">🔒 AI is analysing your cluster... You can navigate to other tabs — results will be ready when you return.</td></tr>';
+                return;
+            }
+
             loading.style.display = 'block';
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">AI is analysing your cluster...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">🔒 AI is analysing your cluster... You can navigate to other tabs.</td></tr>';
             summaryCard.style.display = 'none';
             severityBar.style.display = 'none';
             catFilters.style.display = 'none';
+            window._bgScanInFlight.security = true;
+
+            showToast('⏳ Security scan started — you can navigate to other tabs while it runs.', true);
 
             fetch(`/api/ai/security_scan?namespace=${currentNamespace}`)
                 .then(r => {
@@ -5108,7 +5171,36 @@
                 })
                 .then(data => {
                     if (data.error) throw new Error(data.error);
-                    loading.style.display = 'none';
+                    window._bgScanInFlight.security = false;
+                    window._bgScanCache.security = { data: data, ns: currentNamespace, ts: Date.now() };
+
+                    // If user is still on / returned to security tab, render immediately
+                    const isOnTab = document.getElementById('view-security') && document.getElementById('view-security').style.display !== 'none';
+                    if (isOnTab) {
+                        loading.style.display = 'none';
+                        _renderSecurityData(data);
+                    }
+                    const riskCount = (data.risks || []).length;
+                    showToast('✅ Security scan complete! ' + riskCount + ' finding' + (riskCount !== 1 ? 's' : '') + ' detected.', true);
+                })
+                .catch(e => {
+                    window._bgScanInFlight.security = false;
+                    const isOnTab = document.getElementById('view-security') && document.getElementById('view-security').style.display !== 'none';
+                    if (isOnTab) {
+                        loading.style.display = 'none';
+                        tbody.innerHTML = `<tr><td colspan="6" style="color:red;">Error: ${e.message}</td></tr>`;
+                    }
+                    showToast('❌ Security scan failed: ' + e.message, false);
+                });
+        }
+
+        function _renderSecurityData(data) {
+            const tbody = document.getElementById('sec-table-body');
+            const summaryCard = document.getElementById('sec-summary-card');
+            const severityBar = document.getElementById('sec-severity-bar');
+            const catFilters = document.getElementById('sec-cat-filters');
+            const loading = document.getElementById('sec-loading');
+            loading.style.display = 'none';
 
                     // Executive summary
                     if (data.executive_summary) {
@@ -5169,11 +5261,6 @@
                     if ((data.risks || []).length === 0) {
                         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">✅ No security risks found. Your cluster looks healthy!</td></tr>';
                     }
-                })
-                .catch(e => {
-                    loading.style.display = 'none';
-                    tbody.innerHTML = `<tr><td colspan="6" style="color:red;">Error: ${e.message}</td></tr>`;
-                });
         }
 
         function renderVulnScan() {
