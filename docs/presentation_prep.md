@@ -12,59 +12,6 @@
 
 ![GDC AI Dashboard Architecture](architecture_diagram.png)
 
-<details>
-<summary>Mermaid source (for editable version)</summary>
-
-```mermaid
-graph TB
-    subgraph "Browser (SPA)"
-        UI["Single-Page HTML/JS App"]
-    end
-
-    subgraph "GDC Cluster"
-        subgraph "Dashboard Namespace"
-            Flask["Flask + Gunicorn<br/>4 gevent workers"]
-            SA["ServiceAccount<br/>gdc-dashboard-sa"]
-        end
-
-        subgraph "Target Namespace"
-            Pods["Pods"]
-            Deploys["Deployments"]
-            STS["StatefulSets"]
-            Svc["Services"]
-            VS["VirtualServices"]
-            Secrets["Secrets/ConfigMaps"]
-        end
-
-        subgraph "Cluster Services"
-            Metrics["metrics-server<br/>(metrics.k8s.io)"]
-            RBAC["RBAC<br/>(Role + RoleBinding)"]
-        end
-    end
-
-    subgraph "Google Cloud"
-        Vertex["Vertex AI<br/>Gemini 2.5 Flash"]
-    end
-
-    subgraph "Optional"
-        Splunk["Splunk MCP Server"]
-    end
-
-    UI -->|"HTTP/WebSocket"| Flask
-    Flask -->|"K8s Python Client"| SA
-    SA -->|"Scoped RBAC"| Pods
-    SA -->|"Scoped RBAC"| Deploys
-    SA -->|"Scoped RBAC"| STS
-    SA -->|"Scoped RBAC"| Svc
-    SA -->|"Scoped RBAC"| VS
-    SA -->|"Scoped RBAC"| Secrets
-    SA -->|"metrics.k8s.io API"| Metrics
-    Flask -->|"google-genai SDK<br/>SA key auth"| Vertex
-    Flask -->|"JSON-RPC over HTTP"| Splunk
-```
-
-</details>
-
 ### Tech Stack
 
 | Layer | Technology | Why |
