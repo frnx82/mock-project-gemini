@@ -6211,14 +6211,14 @@
                         const entries = Object.entries(lbls).filter(([k]) =>
                             !['pod-template-hash', 'controller-revision-hash'].includes(k));
                         const inner = entries.length
-                            ? entries.map(([k, v]) => `<span style="display:inline-block;background:rgba(99,102,241,0.1);color:#818cf8;border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:1px 7px;font-size:10px;margin:1px 1px 1px 0;white-space:nowrap;font-family:monospace;">${k}=${v}</span>`).join('')
+                            ? entries.map(([k, v]) => `<span style="display:inline-block;background:var(--badge-bg,rgba(99,102,241,0.1));color:var(--text-primary,#e2e8f0);border:1px solid var(--border-color,rgba(99,102,241,0.25));border-radius:10px;padding:1px 7px;font-size:10px;margin:1px 1px 1px 0;white-space:nowrap;font-family:monospace;">${k}=${v}</span>`).join('')
                             : '<span style="color:#5e6178;font-size:11px;">—</span>';
                         labelsCell = `<td style="max-width:260px;vertical-align:middle;">${inner}</td>`;
                     }
                     // Name cell — clickable for Deployment/StatefulSet to navigate to related pods
                     let nameCell;
                     if (type === 'Deployment' || type === 'StatefulSet') {
-                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:#818cf8;text-decoration:none;cursor:pointer;" title="View pods for ${item.name}">${item.name}</a></td>`;
+                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:var(--text-primary,#e2e8f0);text-decoration:none;cursor:pointer;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'" title="View pods for ${item.name}">${item.name}</a></td>`;
                     } else {
                         nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;">${item.name}</td>`;
                     }
