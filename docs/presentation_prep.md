@@ -77,6 +77,50 @@ graph TB
 | **Container** | Python 3.12-slim + Trivy binary | Multi-stage build, Trivy for vulnerability scanning |
 | **WebSocket** | Flask-SocketIO + gevent-websocket | Real-time log streaming |
 
+### Key Components Explained
+
+#### 📊 metrics-server — "How much CPU/memory are you actually using?"
+
+The [metrics-server](https://github.com/kubernetes-sigs/metrics-server) is a Kubernetes cluster add-on that collects **real-time CPU and memory usage** from every pod via the kubelet. It exposes this data through the `metrics.k8s.io/v1beta1` API.
+
+**How the dashboard uses it:** The **Smart Resource Optimizer** queries metrics-server to get actual pod usage:
+
+```python
+# Fetches real CPU/memory for every pod in the namespace
+raw_pod_metrics = custom_api.list_namespaced_custom_object(
+    group="metrics.k8s.io", version="v1beta1",
+    namespace=namespace, plural="pods"
+)
+# Returns: {"pod-name": {"cpu_cores": 0.42, "mem_mib": 312}} (measured)
+```
+
+The Optimizer then compares actual usage against configured requests/limits:
+- **Usage < 30% of request** → "Cost Saving" — you're over-provisioned, wasting money
+- **Usage > 80% of limit** → "Performance Risk" — nearing throttling/OOMKill
+
+**Fallback:** If metrics-server is NOT installed (common in some GDC environments), the dashboard gracefully falls back to **Gemini AI estimation** based on workload type and image name. The UI shows a badge indicating whether results came from `metrics-server` (measured) or `gemini-estimation` (estimated).
+
+#### 🛡️ RBAC — "What is the dashboard allowed to touch?"
+
+RBAC (Role-Based Access Control) defines the **exact permissions** the dashboard has in the cluster. The dashboard pod runs under a dedicated **ServiceAccount** (`gdc-dashboard-sa`), with a **Role** defining allowed operations and a **RoleBinding** linking them.
+
+**How the dashboard uses it:** Every single K8s API call the dashboard makes — listing pods, reading logs, scaling deployments — is authorized through RBAC. If the Role doesn't grant a permission, the K8s API returns `403 Forbidden`.
+
+| Dashboard Action | RBAC Permission Required | Verb |
+|-----------------|-------------------------|------|
+| Show workloads tab | `pods`, `deployments`, `statefulsets` | `get, list, watch` |
+| View pod logs | `pods/log` | `get` |
+| AI Chat exec command | `pods/exec` | `create, get` |
+| Scale up/down buttons | `deployments/scale` | `patch, update` |
+| Rolling restart / Self-Heal | `deployments` | `patch` |
+| Security Scan (RBAC audit) | `roles`, `rolebindings` | `get, list, watch` |
+| Resource Optimizer | `metrics.k8s.io/pods` | `get, list` |
+
+> [!IMPORTANT]
+> **Namespace-scoped Role, never ClusterRole.** The dashboard can only see/act on resources in namespaces where a RoleBinding has been explicitly created. Each team controls whether the dashboard can access their namespace — they must opt in by applying the RoleBinding.
+
+**In simple terms:** metrics-server answers *"how much are you using?"* and RBAC answers *"what are you allowed to do?"*
+
 ---
 
 ## 📋 Feature Matrix
