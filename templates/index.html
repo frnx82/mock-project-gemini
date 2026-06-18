@@ -6434,6 +6434,14 @@
             Array.from(contentContainer.children).forEach(div => {
                 div.classList.toggle('active', div.id === `${panel}-${type}`);
             });
+
+            // Clear search filter when user clicks a tab directly — show all items
+            // (navigateToPods will set its own filter AFTER calling switchTab)
+            const searchInput = document.getElementById(`wl-search-${type}`);
+            if (searchInput && searchInput.value) {
+                searchInput.value = '';
+                filterWorkloadTable(type);
+            }
         }
 
         // ── Custom confirm helper (avoids native confirm() flicker) ──
