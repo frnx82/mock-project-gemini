@@ -199,3 +199,102 @@ gdc_dashboard_gemini/
 ![Data Flow Summary](diagrams/data_flow_diagram.png)
 
 All reads are safe and non-destructive. Writes (scale, restart, delete) require user confirmation.
+
+---
+
+### 9. AI Framework Evaluation — LangChain & LangFuse
+
+This section documents the architectural decision around AI framework choices and observability tooling.
+
+#### 9.1 LangChain — AI Orchestration Framework
+
+**What it is:** LangChain is a popular framework for building LLM-powered applications. It provides abstractions for chaining LLM calls, tool/function calling, conversation memory, prompt templates, document retrieval (RAG), and agent execution loops.
+
+**Decision: Not adopted.** The GDC Dashboard uses the `google-genai` SDK directly to call Gemini, which is the right fit for this project.
+
+**Rationale:**
+
+| What LangChain Provides | What GDC Dashboard Already Has |
+|---|---|
+| LLM integration | Direct `google-genai` SDK calling Gemini |
+| Function/tool calling | Custom tool-calling agent in `/api/ai/converse` |
+| Conversation memory | Multi-turn chat with session management |
+| Prompt templates | Purpose-built prompt construction in each `/api/ai/*` endpoint |
+| Agent loop | Custom agentic loop in the converse endpoint |
+
+**Why direct SDK is preferred here:**
+
+- **Lower overhead** — `google-genai` is lightweight (~2s import) vs. LangChain's heavier dependency tree
+- **Full control** — Prompts, tool definitions, and response handling are explicitly managed with no hidden abstractions
+- **Simpler debugging** — Fewer layers to trace through when diagnosing AI behavior
+- **Lighter container** — The Docker image stays lean without transitive LangChain dependencies
+- **No abstraction mismatch** — LangChain's generic patterns can obscure Gemini-specific capabilities (e.g., native function calling, safety settings)
+
+**When LangChain would make sense:**
+
+- Rapid prototyping where time-to-first-demo matters more than control
+- Multi-model orchestration (e.g., chaining Gemini + Claude + GPT)
+- Complex RAG pipelines with document loaders, vector stores, and retrievers
+- Applications that need to switch LLM providers frequently
+
+#### 9.2 LangFuse — LLM Observability & Tracing
+
+**What it is:** LangFuse is an open-source observability platform purpose-built for LLM applications. It provides tracing, cost tracking, prompt management, session grouping, quality scoring, and evaluation capabilities — similar to Datadog/New Relic but specifically for AI calls.
+
+**Decision: Not adopted yet — recommended for production deployment.**
+
+**What LangFuse would provide for GDC Dashboard:**
+
+| Capability | Value for This Project |
+|---|---|
+| **Trace every LLM call** | Input prompt, output, latency, token count across all 15+ AI endpoints |
+| **Session grouping** | Track multi-turn `/api/ai/converse` conversations end-to-end |
+| **Cost tracking** | Monitor Gemini API spend per feature (diagnose, RCA, security scan, etc.) |
+| **Quality scoring** | Measure whether AI responses are accurate and actionable |
+| **Prompt versioning** | A/B test prompt changes without redeploying |
+| **Failure detection** | Surface AI calls that timeout, hallucinate, or return poor results |
+
+**Adoption guidance by deployment stage:**
+
+| Stage | Recommendation |
+|---|---|
+| Local development / demo | ❌ Not needed — adds unnecessary complexity |
+| Internal tool for a small team | ⚠️ Nice to have — helps track costs and catch bad outputs |
+| Production with real users | ✅ Strongly recommended — essential for reliability and cost management |
+| Optimizing AI response quality | ✅ Yes — trace and evaluate outputs systematically |
+
+**Integration path (when ready):**
+
+LangFuse integrates with the `google-genai` SDK via a lightweight decorator pattern — no need to adopt LangChain. The integration would add tracing to existing endpoints without changing the core architecture:
+
+```python
+# Example: Adding LangFuse tracing to an existing AI endpoint
+from langfuse.decorators import observe
+
+@observe(name="diagnose_pod")
+def diagnose_pod(pod_name):
+    # Existing Gemini call — unchanged
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt
+    )
+    return response.text
+```
+
+#### 9.3 Summary
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  AI Architecture Decision                │
+├─────────────────────────┬───────────────────────────────┤
+│  LangChain              │  ❌ Not adopted               │
+│  (AI Orchestration)     │  Direct google-genai SDK      │
+│                         │  provides full control with   │
+│                         │  less overhead                │
+├─────────────────────────┼───────────────────────────────┤
+│  LangFuse               │  ⚠️ Deferred                  │
+│  (AI Observability)     │  Recommended when moving to   │
+│                         │  production — integrates      │
+│                         │  without architectural change │
+└─────────────────────────┴───────────────────────────────┘
+```
