@@ -202,99 +202,51 @@ All reads are safe and non-destructive. Writes (scale, restart, delete) require 
 
 ---
 
-### 9. AI Framework Evaluation — LangChain & LangFuse
+### 9. AI Framework Evolution — LangGraph, Langfuse & OpenTelemetry
 
-This section documents the architectural decision around AI framework choices and observability tooling.
+> **Full design document:** [AI-ORCHESTRATION-OBSERVABILITY-PLAN.md](AI-ORCHESTRATION-OBSERVABILITY-PLAN.md)
 
-#### 9.1 LangChain — AI Orchestration Framework
+This section summarizes the planned evolution of the AI architecture. The detailed architecture, orchestration graphs, data flows, and implementation phases are documented in the linked plan above.
 
-**What it is:** LangChain is a popular framework for building LLM-powered applications. It provides abstractions for chaining LLM calls, tool/function calling, conversation memory, prompt templates, document retrieval (RAG), and agent execution loops.
+#### 9.1 Current Architecture (Direct SDK)
 
-**Decision: Not adopted.** The GDC Dashboard uses the `google-genai` SDK directly to call Gemini, which is the right fit for this project.
+The dashboard currently uses `google-genai` SDK directly — 15+ direct-prompt endpoints and 1 hand-rolled agentic chat loop with 10 K8s tools. This provides full control with minimal dependencies.
 
-**Rationale:**
+#### 9.2 Planned Architecture
 
-| What LangChain Provides | What GDC Dashboard Already Has |
-|---|---|
-| LLM integration | Direct `google-genai` SDK calling Gemini |
-| Function/tool calling | Custom tool-calling agent in `/api/ai/converse` |
-| Conversation memory | Multi-turn chat with session management |
-| Prompt templates | Purpose-built prompt construction in each `/api/ai/*` endpoint |
-| Agent loop | Custom agentic loop in the converse endpoint |
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Orchestration** | LangGraph | Multi-agent graph: K8s Agent + Data Agent + Analysis Agent |
+| **Data Access** | database-mcp (FastMCP) | Unified gateway to Oracle, Impala, BigQuery, CloudSQL |
+| **LLM Observability** | Langfuse | Trace every LLM call, token usage, cost, quality |
+| **App Tracing** | OpenTelemetry SDK | Distributed traces for all requests |
+| **Metrics Pipeline** | OTel Collector → Prometheus → Grafana | AI operations dashboards |
 
-**Why direct SDK is preferred here:**
+#### 9.3 Key Capabilities
 
-- **Lower overhead** — `google-genai` is lightweight (~2s import) vs. LangChain's heavier dependency tree
-- **Full control** — Prompts, tool definitions, and response handling are explicitly managed with no hidden abstractions
-- **Simpler debugging** — Fewer layers to trace through when diagnosing AI behavior
-- **Lighter container** — The Docker image stays lean without transitive LangChain dependencies
-- **No abstraction mismatch** — LangChain's generic patterns can obscure Gemini-specific capabilities (e.g., native function calling, safety settings)
+- **Business data queries** via chat — "How many trades settled yesterday?" → queries Oracle via database-mcp
+- **Cross-domain analysis** — "Is the trade processor healthy AND are there stuck trades?" → K8s Agent + Data Agent combined
+- **Cross-database queries** — "Compare Oracle volumes with BigQuery reporting" → queries multiple databases
+- **Full observability** — every LLM call traced in Langfuse, every request traced in OTel, metrics in Prometheus
 
-**When LangChain would make sense:**
-
-- Rapid prototyping where time-to-first-demo matters more than control
-- Multi-model orchestration (e.g., chaining Gemini + Claude + GPT)
-- Complex RAG pipelines with document loaders, vector stores, and retrievers
-- Applications that need to switch LLM providers frequently
-
-#### 9.2 LangFuse — LLM Observability & Tracing
-
-**What it is:** LangFuse is an open-source observability platform purpose-built for LLM applications. It provides tracing, cost tracking, prompt management, session grouping, quality scoring, and evaluation capabilities — similar to Datadog/New Relic but specifically for AI calls.
-
-**Decision: Not adopted yet — recommended for production deployment.**
-
-**What LangFuse would provide for GDC Dashboard:**
-
-| Capability | Value for This Project |
-|---|---|
-| **Trace every LLM call** | Input prompt, output, latency, token count across all 15+ AI endpoints |
-| **Session grouping** | Track multi-turn `/api/ai/converse` conversations end-to-end |
-| **Cost tracking** | Monitor Gemini API spend per feature (diagnose, RCA, security scan, etc.) |
-| **Quality scoring** | Measure whether AI responses are accurate and actionable |
-| **Prompt versioning** | A/B test prompt changes without redeploying |
-| **Failure detection** | Surface AI calls that timeout, hallucinate, or return poor results |
-
-**Adoption guidance by deployment stage:**
-
-| Stage | Recommendation |
-|---|---|
-| Local development / demo | ❌ Not needed — adds unnecessary complexity |
-| Internal tool for a small team | ⚠️ Nice to have — helps track costs and catch bad outputs |
-| Production with real users | ✅ Strongly recommended — essential for reliability and cost management |
-| Optimizing AI response quality | ✅ Yes — trace and evaluate outputs systematically |
-
-**Integration path (when ready):**
-
-LangFuse integrates with the `google-genai` SDK via a lightweight decorator pattern — no need to adopt LangChain. The integration would add tracing to existing endpoints without changing the core architecture:
-
-```python
-# Example: Adding LangFuse tracing to an existing AI endpoint
-from langfuse.decorators import observe
-
-@observe(name="diagnose_pod")
-def diagnose_pod(pod_name):
-    # Existing Gemini call — unchanged
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt
-    )
-    return response.text
-```
-
-#### 9.3 Summary
+#### 9.4 Summary
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  AI Architecture Decision                │
+│               AI Architecture (Planned)                  │
 ├─────────────────────────┬───────────────────────────────┤
-│  LangChain              │  ❌ Not adopted               │
-│  (AI Orchestration)     │  Direct google-genai SDK      │
-│                         │  provides full control with   │
-│                         │  less overhead                │
+│  LangGraph              │  ✅ Planned                    │
+│  (Agent Orchestration)  │  Multi-agent graph with K8s,  │
+│                         │  Data, and Analysis agents     │
 ├─────────────────────────┼───────────────────────────────┤
-│  LangFuse               │  ⚠️ Deferred                  │
-│  (AI Observability)     │  Recommended when moving to   │
-│                         │  production — integrates      │
-│                         │  without architectural change │
+│  database-mcp           │  ✅ Built (FastMCP 3.x)        │
+│  (Business Data)        │  Oracle, Impala, BQ, CloudSQL │
+├─────────────────────────┼───────────────────────────────┤
+│  Langfuse               │  ✅ Planned (Phase 1)          │
+│  (LLM Observability)    │  Trace all AI calls + costs   │
+├─────────────────────────┼───────────────────────────────┤
+│  OpenTelemetry           │  ✅ Planned (Phase 2)          │
+│  (App Tracing)          │  OTel → Collector → Prometheus │
 └─────────────────────────┴───────────────────────────────┘
 ```
+
