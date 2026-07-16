@@ -487,6 +487,123 @@
             outline: none;
         }
         input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+
+        /* ── Stat Cards Row ───────────────────────────────────── */
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1.25rem;
+            transition: all var(--transition);
+        }
+        .stat-card:hover { background: var(--bg-card-hover); border-color: var(--border-active); }
+        .stat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+        .stat-icon.green { background: rgba(34,197,94,0.1); color: var(--green); }
+        .stat-icon.amber { background: rgba(245,158,11,0.1); color: var(--amber); }
+        .stat-icon.red { background: rgba(239,68,68,0.1); color: var(--red); }
+        .stat-icon.accent { background: var(--accent-glow); color: var(--accent); }
+        .stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+        .stat-change { font-size: 0.7rem; font-weight: 600; margin-top: 0.25rem; }
+        .stat-change.up { color: var(--green); }
+        .stat-change.down { color: var(--red); }
+        .stat-change.neutral { color: var(--text-muted); }
+
+        /* ── Grid Layouts ─────────────────────────────────────── */
+        .grid-2col { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-top: 1.5rem; }
+
+        /* ── Cards ────────────────────────────────────────────── */
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+        .card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+        }
+        .card-title { font-size: 0.85rem; font-weight: 600; }
+        .card-action { font-size: 0.7rem; font-weight: 500; color: var(--accent); cursor: pointer; text-decoration: none; }
+        .card-action:hover { text-decoration: underline; }
+        .card-body { padding: 1rem 1.25rem; }
+
+        /* ── AI Quick Actions ─────────────────────────────────── */
+        .ai-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+        .ai-action-item {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.75rem; border-radius: var(--radius-sm);
+            background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+            cursor: pointer; transition: all var(--transition);
+        }
+        .ai-action-item:hover { background: var(--accent-glow); border-color: var(--border-active); }
+        .ai-action-icon {
+            width: 36px; height: 36px; border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem; flex-shrink: 0;
+        }
+        .ai-action-icon.diag { background: rgba(6,182,212,0.12); }
+        .ai-action-icon.opt { background: rgba(34,197,94,0.12); }
+        .ai-action-icon.sec { background: rgba(239,68,68,0.12); }
+        .ai-action-icon.net { background: rgba(168,85,247,0.12); }
+        .ai-action-title { font-size: 0.8rem; font-weight: 600; }
+        .ai-action-desc { font-size: 0.7rem; color: var(--text-muted); }
+
+        /* ── Pod Status Mini Chart ────────────────────────────── */
+        .pod-chart { display: flex; align-items: center; gap: 1.5rem; padding: 0.5rem 0; }
+        .donut-container { position: relative; width: 120px; height: 120px; }
+        .donut-center {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .donut-value { font-size: 1.5rem; font-weight: 700; }
+        .donut-label { font-size: 0.65rem; color: var(--text-muted); }
+        .pod-legend { display: flex; flex-direction: column; gap: 0.5rem; }
+        .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        /* ── Chat Panel (right-side slide drawer) ─────────────── */
+        #chat-panel {
+            position: fixed;
+            right: -420px;
+            top: 0;
+            bottom: 0;
+            width: 400px;
+            max-height: 100vh;
+            background: var(--bg-sidebar);
+            border-left: 1px solid var(--border);
+            box-shadow: -4px 0 24px rgba(0,0,0,0.3);
+            z-index: 1900;
+            display: flex;
+            flex-direction: column;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #chat-panel.open {
+            right: 0 !important;
+        }
+        #chat-header {
+            background: linear-gradient(135deg, #06b6d4, #8b5cf6) !important;
+            padding: 12px 14px !important;
+        }
+        #chat-messages {
+            flex: 1 1 0;
+            min-height: 0;
+            overflow-y: auto;
+        }
+        .chat-bubble {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+        .chat-bubble.user {
+            background: var(--accent);
+            color: #0b1120;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-bubble.assistant {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
     </style>
 
     <!-- xterm.js for terminal -->
@@ -757,6 +874,42 @@
         <div class="gdc-content">
 <!-- Workloads View -->
         <div id="view-workloads" style="display: block;">
+            <!-- Stats Cards Row -->
+            <div class="stats-row" id="gdc-stats-row">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Total Pods</span>
+                        <div class="stat-icon green">🟢</div>
+                    </div>
+                    <div class="stat-value" id="stat-total-pods">—</div>
+                    <div class="stat-change neutral" id="stat-pods-change">Loading...</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Deployments</span>
+                        <div class="stat-icon accent">📦</div>
+                    </div>
+                    <div class="stat-value" id="stat-deployments">—</div>
+                    <div class="stat-change neutral" id="stat-deploy-change">Loading...</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Warnings</span>
+                        <div class="stat-icon amber">⚠️</div>
+                    </div>
+                    <div class="stat-value" id="stat-warnings">—</div>
+                    <div class="stat-change neutral" id="stat-warn-change">Checking...</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-label">Critical</span>
+                        <div class="stat-icon red">🔴</div>
+                    </div>
+                    <div class="stat-value" id="stat-critical">—</div>
+                    <div class="stat-change neutral" id="stat-crit-change">Checking...</div>
+                </div>
+            </div>
+
             <!-- Health Pulse Banner (compact single-line pill) -->
             <div id="health-pulse-banner" style="display:none;margin-bottom:10px;">
                 <div id="health-pulse-loading"
@@ -785,6 +938,72 @@
             <!-- Sub Tabs for Workloads -->
             <div class="panel-tabs" id="workloads-tabs"></div>
             <div id="workloads-content">Loading...</div>
+
+            <!-- AI Quick Actions + Pod Status Grid -->
+            <div class="grid-2col">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">🤖 AI Quick Actions</span>
+                    </div>
+                    <div class="card-body ai-actions">
+                        <div class="ai-action-item" onclick="switchMainTab('workloads')">
+                            <div class="ai-action-icon diag">🔍</div>
+                            <div>
+                                <div class="ai-action-title">AI Diagnose</div>
+                                <div class="ai-action-desc">Full health analysis with root cause</div>
+                            </div>
+                        </div>
+                        <div class="ai-action-item" onclick="switchMainTab('optimizer')">
+                            <div class="ai-action-icon opt">📊</div>
+                            <div>
+                                <div class="ai-action-title">Resource Optimizer</div>
+                                <div class="ai-action-desc">Right-size CPU & memory limits</div>
+                            </div>
+                        </div>
+                        <div class="ai-action-item" onclick="switchMainTab('security')">
+                            <div class="ai-action-icon sec">🛡️</div>
+                            <div>
+                                <div class="ai-action-title">Security Scan</div>
+                                <div class="ai-action-desc">CVE scan + audit findings</div>
+                            </div>
+                        </div>
+                        <div class="ai-action-item" onclick="switchMainTab('networking')">
+                            <div class="ai-action-icon net">🌐</div>
+                            <div>
+                                <div class="ai-action-title">Network Analysis</div>
+                                <div class="ai-action-desc">Service mesh & traffic policies</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Pod Status</span>
+                        <span class="card-action" onclick="switchMainTab('workloads')">Details →</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="pod-chart">
+                            <div class="donut-container" id="pod-donut-chart">
+                                <svg viewBox="0 0 120 120">
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="12"/>
+                                    <circle id="donut-running" cx="60" cy="60" r="50" fill="none" stroke="#22c55e" stroke-width="12" stroke-dasharray="272 314" stroke-dashoffset="0" transform="rotate(-90 60 60)"/>
+                                    <circle id="donut-pending" cx="60" cy="60" r="50" fill="none" stroke="#f59e0b" stroke-width="12" stroke-dasharray="26 314" stroke-dashoffset="-272" transform="rotate(-90 60 60)"/>
+                                    <circle id="donut-failed" cx="60" cy="60" r="50" fill="none" stroke="#ef4444" stroke-width="12" stroke-dasharray="16 314" stroke-dashoffset="-298" transform="rotate(-90 60 60)"/>
+                                </svg>
+                                <div class="donut-center">
+                                    <div class="donut-value" id="donut-total">—</div>
+                                    <div class="donut-label">Total</div>
+                                </div>
+                            </div>
+                            <div class="pod-legend">
+                                <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> Running <strong id="legend-running">—</strong></div>
+                                <div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span> Pending <strong id="legend-pending">—</strong></div>
+                                <div class="legend-item"><span class="legend-dot" style="background:var(--red)"></span> Failed <strong id="legend-failed">—</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1303,11 +1522,7 @@
     </div>
 
     <style>
-        /* Chat drawer layout */
-        #chat-panel {
-            display: flex;
-            flex-direction: column;
-        }
+        /* Chat drawer layout — positioning handled in main CSS above */
 
         /* Typing animation */
         .typing-dot {
@@ -3571,10 +3786,56 @@
             const el = document.getElementById('pod-status-summary');
             el.innerHTML = `
                         Pod Status: 
-                        <span style="color:green; margin-left: 5px;">Running: ${running}</span>
-                        <span style="color:orange; margin-left: 10px;">Pending: ${pending}</span>
-                        <span style="color:red; margin-left: 10px;">Failed: ${failed}</span>
+                        <span style="color:var(--green); margin-left: 5px;">Running: ${running}</span>
+                        <span style="color:var(--amber); margin-left: 10px;">Pending: ${pending}</span>
+                        <span style="color:var(--red); margin-left: 10px;">Failed: ${failed}</span>
                     `;
+
+            // ── Update Stat Cards ──
+            const totalPods = pods.length;
+            const deployments = workloads.filter(w => w.type === 'Deployment');
+            const deployCount = deployments.length;
+            const warnings = pending;
+            const crashloops = workloads.filter(w => w.status === 'CrashLoopBackOff').length;
+            const criticals = failed + crashloops;
+
+            const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+            setEl('stat-total-pods', totalPods);
+            setEl('stat-deployments', deployCount);
+            setEl('stat-warnings', warnings);
+            setEl('stat-critical', criticals > 0 ? criticals : 0);
+
+            // Change text
+            const setChange = (id, text, cls) => {
+                const e = document.getElementById(id);
+                if (e) { e.textContent = text; e.className = 'stat-change ' + cls; }
+            };
+            setChange('stat-pods-change', totalPods > 0 ? `${running} running of ${totalPods}` : 'No pods', 'neutral');
+            setChange('stat-deploy-change', deployCount > 0 ? 'All healthy' : 'No deployments', 'neutral');
+            if (warnings > 0) { setChange('stat-warn-change', `↑ ${warnings} pending pods`, 'down'); }
+            else { setChange('stat-warn-change', 'No warnings', 'up'); }
+            if (criticals > 0) {
+                const crashName = workloads.find(w => w.status === 'CrashLoopBackOff' || w.status === 'Failed');
+                setChange('stat-crit-change', crashName ? crashName.name + ' failed' : criticals + ' issues', 'down');
+            } else { setChange('stat-crit-change', 'All healthy', 'up'); }
+
+            // ── Update Donut Chart ──
+            const circ = 2 * Math.PI * 50; // circumference = 314.16
+            const runArc = totalPods > 0 ? (running / totalPods) * circ : 0;
+            const pendArc = totalPods > 0 ? (pending / totalPods) * circ : 0;
+            const failArc = totalPods > 0 ? (failed / totalPods) * circ : 0;
+
+            const dRun = document.getElementById('donut-running');
+            const dPend = document.getElementById('donut-pending');
+            const dFail = document.getElementById('donut-failed');
+            if (dRun) dRun.setAttribute('stroke-dasharray', `${runArc} ${circ}`);
+            if (dPend) { dPend.setAttribute('stroke-dasharray', `${pendArc} ${circ}`); dPend.setAttribute('stroke-dashoffset', `-${runArc}`); }
+            if (dFail) { dFail.setAttribute('stroke-dasharray', `${failArc} ${circ}`); dFail.setAttribute('stroke-dashoffset', `-${runArc + pendArc}`); }
+
+            setEl('donut-total', totalPods);
+            setEl('legend-running', running);
+            setEl('legend-pending', pending);
+            setEl('legend-failed', failed);
         }
 
         // ─── Job status badge helper ───
