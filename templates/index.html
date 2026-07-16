@@ -4311,15 +4311,25 @@
 
             // ── Services ──────────────────────────────────────────────
             const svcContainer = document.getElementById('networking-Service');
-            const svcSearchHtml = `<div style="margin-bottom:10px;">
-                    <input type="text" id="net-search-Service" placeholder="Search Services..." oninput="filterNetworkTable('Service')" 
-                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:13px;outline:none;transition:border-color 0.2s;"
-                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor=''">
-                </div>`;
+
+
 
             if (services.length > 0) {
-                let html = svcSearchHtml + `
-                <table><thead><tr><th>Name</th><th>Type</th><th>Cluster IP</th><th>Ports</th><th>Age</th><th>Actions</th></tr></thead><tbody>`;
+                let html = `
+                <div class="card" style="margin-bottom:1rem;">
+                    <div class="card-header">
+                        <span class="card-title">🌐 Services (${services.length})</span>
+                        <div style="flex:1;max-width:320px;margin-left:auto;">
+                            <input type="text" id="net-search-Service" placeholder="Search Services..." oninput="filterNetworkTable('Service')" 
+                                style="width:100%;padding:6px 12px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-input);color:var(--text-primary);font-size:0.8rem;outline:none;font-family:var(--font);"
+                                onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor=''">
+                        </div>
+                    </div>
+                    <table class="table">
+                        <thead><tr>
+                            <th>Name</th><th>Type</th><th>Cluster IP</th><th>Ports</th><th>Age</th><th>Actions</th>
+                        </tr></thead>
+                        <tbody>`;
                 html += services.map(s => {
                     const typeBadge = {
                         'LoadBalancer': 'background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3)',
@@ -4329,67 +4339,75 @@
                     }[s.type] || 'background:rgba(139,143,163,0.12);color:#8b8fa3;border:1px solid rgba(139,143,163,0.3)';
                     const nameAttr = `data-svc-name="${s.name}" data-svc-type="${s.type}" data-svc-ports="${s.ports}" data-svc-ns="${ns}"`;
                     return `<tr>
-                                <td><strong>${s.name}</strong></td>
-                                <td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${typeBadge}">${s.type}</span></td>
-                                <td style="font-family:monospace;font-size:12px;">${s.cluster_ip}</td>
-                                <td style="font-family:monospace;font-size:12px;">${s.ports}</td>
-                                <td style="color:#888;font-size:12px;">${s.age}</td>
+                                <td class="name">${s.name}</td>
+                                <td><span class="badge info" style="${typeBadge};padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:600;">${s.type}</span></td>
+                                <td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);">${s.cluster_ip}</td>
+                                <td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);">${s.ports}</td>
+                                <td style="font-size:0.75rem;color:var(--text-muted);">${s.age}</td>
                                 <td style="white-space:nowrap;">
-                                    <button class="btn ai-btn ai-btn-health" style="font-size:11px;padding:3px 8px;margin:1px;" ${nameAttr} data-net-action="svc-analyze">🔍 Analyze</button>
-                                    <button class="btn ai-btn ai-btn-dep"    style="font-size:11px;padding:3px 8px;margin:1px;" ${nameAttr} data-net-action="svc-dep">🔗 Dep Map</button>
-                                    <button class="btn ai-btn ai-btn-audit"  style="font-size:11px;padding:3px 8px;margin:1px;" ${nameAttr} data-net-action="svc-risk">⚠️ Risk</button>
+                                    <button class="action-btn" style="font-size:0.7rem;padding:0.25rem 0.5rem;margin:1px;" ${nameAttr} data-net-action="svc-analyze">🔍 Analyze</button>
+                                    <button class="action-btn" style="font-size:0.7rem;padding:0.25rem 0.5rem;margin:1px;" ${nameAttr} data-net-action="svc-dep">🔗 Dep Map</button>
+                                    <button class="action-btn" style="font-size:0.7rem;padding:0.25rem 0.5rem;margin:1px;border-color:var(--amber);color:var(--amber);" ${nameAttr} data-net-action="svc-risk">⚠️ Risk</button>
                                 </td>
                             </tr>`;
                 }).join('');
-                html += `</tbody></table>`;
+                html += `</tbody></table></div>`;
                 svcContainer.innerHTML = html;
                 if (savedNetSearch['Service']) {
                     const inp = document.getElementById('net-search-Service');
                     if (inp) { inp.value = savedNetSearch['Service']; filterNetworkTable('Service'); }
                 }
             } else {
-                svcContainer.innerHTML = svcSearchHtml + '<p>No Services found.</p>';
+                svcContainer.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-muted);padding:2rem;">No Services found in this namespace.</div></div>';
             }
 
             // ── VirtualServices ───────────────────────────────────────
             const vsContainer = document.getElementById('networking-VirtualService');
-            const vsSearchHtml = `<div style="margin-bottom:10px;">
-                    <input type="text" id="net-search-VirtualService" placeholder="Search VirtualServices..." oninput="filterNetworkTable('VirtualService')" 
-                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:13px;outline:none;transition:border-color 0.2s;"
-                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor=''">
-                </div>`;
 
             if (virtualServices.length > 0) {
-                let html = vsSearchHtml + `
-                <table><thead><tr><th>Name</th><th>Hosts</th><th>Gateways</th><th>Age</th><th>Actions</th></tr></thead><tbody>`;
+                let html = `
+                <div class="card" style="margin-bottom:1rem;">
+                    <div class="card-header">
+                        <span class="card-title">🔀 VirtualServices (${virtualServices.length})</span>
+                        <div style="flex:1;max-width:320px;margin-left:auto;">
+                            <input type="text" id="net-search-VirtualService" placeholder="Search VirtualServices..." oninput="filterNetworkTable('VirtualService')" 
+                                style="width:100%;padding:6px 12px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-input);color:var(--text-primary);font-size:0.8rem;outline:none;font-family:var(--font);"
+                                onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor=''">
+                        </div>
+                    </div>
+                    <table class="table">
+                        <thead><tr>
+                            <th>Name</th><th>Hosts</th><th>Gateways</th><th>Age</th><th>Actions</th>
+                        </tr></thead>
+                        <tbody>`;
                 html += virtualServices.map(vs => {
                     let hosts = Array.isArray(vs.hosts) ? vs.hosts : (String(vs.hosts).includes(',') ? String(vs.hosts).split(',') : [vs.hosts]);
                     let hostLinks = hosts.map(h => {
                         h = h.trim();
-                        if (h === '*') return '*';
+                        if (h === '*') return '<span style="color:var(--text-muted);">*</span>';
                         let url = h.startsWith('http') ? h : 'http://' + h;
-                        return `<a href="${url}" target="_blank" style="color:#4da6ff;text-decoration:underline;">${h}</a>`;
+                        return `<a href="${url}" target="_blank" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed var(--accent);">${h}</a>`;
                     }).join(', ');
                     const vsAttr = `data-vs-name="${vs.name}" data-vs-hosts="${holes(vs.hosts)}" data-vs-gw="${vs.gateways}" data-vs-ns="${ns}"`;
                     return `<tr>
-                                <td><strong>${vs.name}</strong></td>
+                                <td class="name">${vs.name}</td>
                                 <td>${hostLinks}</td>
-                                <td style="font-size:12px;color:#888;">${vs.gateways || '—'}</td>
-                                <td style="color:#888;font-size:12px;">${vs.age}</td>
+                                <td style="font-size:0.75rem;color:var(--text-muted);">${vs.gateways || '—'}</td>
+                                <td style="font-size:0.75rem;color:var(--text-muted);">${vs.age}</td>
                                 <td style="white-space:nowrap;">
-                                    <button class="btn ai-btn ai-btn-route"  style="font-size:11px;padding:3px 8px;margin:1px;" ${vsAttr} data-net-action="vs-route">🌐 Route</button>
-                                    <button class="btn ai-btn ai-btn-policy" style="font-size:11px;padding:3px 8px;margin:1px;" ${vsAttr} data-net-action="vs-policy">🛡️ Policy</button>
+                                    <button class="action-btn" style="font-size:0.7rem;padding:0.25rem 0.5rem;margin:1px;" ${vsAttr} data-net-action="vs-route">🌐 Route</button>
+                                    <button class="action-btn" style="font-size:0.7rem;padding:0.25rem 0.5rem;margin:1px;" ${vsAttr} data-net-action="vs-policy">🛡️ Policy</button>
                                 </td>
                             </tr>`;
                 }).join('');
-                html += `</tbody></table>`;
+                html += `</tbody></table></div>`;
                 vsContainer.innerHTML = html;
                 if (savedNetSearch['VirtualService']) {
                     const inp = document.getElementById('net-search-VirtualService');
                     if (inp) { inp.value = savedNetSearch['VirtualService']; filterNetworkTable('VirtualService'); }
                 }
             } else {
-                vsContainer.innerHTML = vsSearchHtml + '<p>No VirtualServices found. VirtualServices provide advanced traffic management (retries, canary, fault injection) for your services.</p>';
+                vsContainer.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;color:var(--text-muted);padding:2rem;"><div style="font-size:1.5rem;margin-bottom:0.5rem;">🔀</div>No VirtualServices found.<br><span style="font-size:0.75rem;">VirtualServices provide advanced traffic management (retries, canary, fault injection) for your services.</span></div></div>';
             }
         }
         function holes(v) { return Array.isArray(v) ? v.join(',') : String(v || ''); }
