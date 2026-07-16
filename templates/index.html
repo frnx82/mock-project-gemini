@@ -523,6 +523,36 @@
         .card-action:hover { text-decoration: underline; }
         .card-body { padding: 1rem 1.25rem; }
 
+        /* ── Status Badges ────────────────────────────────────── */
+        .badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 0.7rem; font-weight: 600; padding: 2px 8px;
+            border-radius: 10px;
+        }
+        .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .badge.running { background: rgba(34,197,94,0.12); color: var(--green); }
+        .badge.running .badge-dot { background: var(--green); }
+        .badge.pending { background: rgba(245,158,11,0.12); color: var(--amber); }
+        .badge.pending .badge-dot { background: var(--amber); }
+        .badge.failed { background: rgba(239,68,68,0.12); color: var(--red); }
+        .badge.failed .badge-dot { background: var(--red); }
+        .badge.info { background: rgba(6,182,212,0.12); color: var(--accent); }
+
+        /* ── Action Buttons ───────────────────────────────────── */
+        .action-btn {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            font-size: 0.7rem; font-weight: 500; padding: 0.3rem 0.6rem;
+            border-radius: var(--radius-xs); border: 1px solid var(--border);
+            background: transparent; color: var(--text-secondary);
+            cursor: pointer; transition: all var(--transition);
+        }
+        .action-btn:hover { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+        .action-btn.primary { background: var(--accent); color: #0b1120; border-color: var(--accent); font-weight: 600; }
+        .action-btn.primary:hover { filter: brightness(1.15); }
+
+        /* ── Table name cell ──────────────────────────────────── */
+        .table td.name { font-weight: 600; max-width: 220px; word-break: break-word; }
+
         /* ── AI Quick Actions ─────────────────────────────────── */
         .ai-actions { display: flex; flex-direction: column; gap: 0.5rem; }
         .ai-action-item {
@@ -4151,18 +4181,24 @@
 
                 const container = document.getElementById(`workloads-${type}`);
 
-                // Always show search bar (even if no data yet)
-                const searchHtml = `<div style="margin-bottom:10px;">
-                    <input type="text" id="wl-search-${type}" placeholder="Search ${type}s..." oninput="filterWorkloadTable('${type}')" 
-                        style="width:100%;max-width:360px;padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-primary);font-size:13px;outline:none;transition:border-color 0.2s;"
-                        onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor=''">
-                </div>`;
+                // Type icons for card headers
+                const typeIcons = {Deployment:'📦',StatefulSet:'🗄️',DaemonSet:'👾',Job:'⚡',Pod:'🔵',ConfigMap:'📋',Secret:'🔐'};
+                const icon = typeIcons[type] || '📄';
 
                 if (items.length === 0) {
-                    container.innerHTML = searchHtml + ((currentFilter && currentFilter.target === type)
-                        ? '<p>No resources found matching filter.</p>'
-                        : '<p>No resources found.</p>');
-                    // Restore search term if it was saved
+                    const emptyMsg = (currentFilter && currentFilter.target === type)
+                        ? 'No resources found matching filter.'
+                        : 'No resources found.';
+                    container.innerHTML = `<div class="card">
+                        <div class="card-header">
+                            <span class="card-title">${icon} ${type}s (0)</span>
+                            <div style="flex:1;max-width:320px;margin-left:auto;">
+                                <input type="text" id="wl-search-${type}" placeholder="Search ${type}s..." oninput="filterWorkloadTable('${type}')" 
+                                    style="width:100%;padding:6px 12px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-input);color:var(--text-primary);font-size:0.8rem;outline:none;font-family:var(--font);">
+                            </div>
+                        </div>
+                        <div class="card-body" style="text-align:center;color:var(--text-muted);padding:2rem;">${emptyMsg}</div>
+                    </div>`;
                     if (savedSearchTerms[type]) {
                         const inp = document.getElementById(`wl-search-${type}`);
                         if (inp) inp.value = savedSearchTerms[type];
@@ -4176,61 +4212,66 @@
                     : '<th>Status</th><th>Ready</th>';
                 const labelsHeader = isDeployment ? '<th>Labels</th>' : '';
 
-                let html = searchHtml + `
-                <table><thead><tr><th>Name</th>${statusHeader}${labelsHeader}<th>Age</th><th>Actions</th></tr></thead><tbody>`;
+                let html = `<div class="card">
+                    <div class="card-header">
+                        <span class="card-title">${icon} ${type}s (${items.length})</span>
+                        <div style="flex:1;max-width:320px;margin-left:auto;">
+                            <input type="text" id="wl-search-${type}" placeholder="Search ${type}s..." oninput="filterWorkloadTable('${type}')" 
+                                style="width:100%;padding:6px 12px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-input);color:var(--text-primary);font-size:0.8rem;outline:none;font-family:var(--font);">
+                        </div>
+                    </div>
+                    <table class="table"><thead><tr><th>Name</th>${statusHeader}${labelsHeader}<th>Age</th><th>Actions</th></tr></thead><tbody>`;
 
                 items.forEach(item => {
-                    let statusColor = (item.status === 'Running' || (item.status && item.status.includes('/'))) ? 'green' : '#f0ad4e';
-                    if (['Failed', 'CrashLoopBackOff', 'Error', 'OOMKilled'].includes(item.status)) statusColor = '#dc3545';
-                    if (item.status === 'Succeeded') statusColor = '#28a745';
+                    let statusBadgeClass = 'running';
+                    if (['Failed', 'CrashLoopBackOff', 'Error', 'OOMKilled'].includes(item.status)) statusBadgeClass = 'failed';
+                    else if (['Pending', 'Progressing', 'Terminating'].includes(item.status)) statusBadgeClass = 'pending';
+                    else if (item.status === 'Succeeded') statusBadgeClass = 'running';
 
                     let statusCell = '', readyCell = '';
                     if (type === 'Job') {
                         statusCell = `<td>${jobStatusBadge(item)}</td>`;
                         const jc = item.job_completions || 1, js = item.job_succeeded || 0;
                         const pct = Math.round((js / jc) * 100);
-                        readyCell = `<td><div style="background:#e9ecef;border-radius:4px;height:8px;width:80px;overflow:hidden;display:inline-block;vertical-align:middle;"><div style="background:#28a745;height:100%;width:${pct}%;"></div></div><span style="font-size:11px;color:#666;margin-left:6px;">${js}/${jc}</span></td>`;
+                        readyCell = `<td><div style="background:rgba(255,255,255,0.06);border-radius:4px;height:8px;width:80px;overflow:hidden;display:inline-block;vertical-align:middle;"><div style="background:var(--green);height:100%;width:${pct}%;border-radius:4px;"></div></div><span style="font-size:0.7rem;color:var(--text-muted);margin-left:6px;">${js}/${jc}</span></td>`;
                     } else {
-                        statusCell = `<td style="color:${statusColor};font-weight:500;">${item.status}</td>`;
-                        readyCell = `<td>${item.ready}/${item.total}</td>`;
+                        statusCell = `<td><span class="badge ${statusBadgeClass}"><span class="badge-dot"></span>${item.status}</span></td>`;
+                        readyCell = `<td style="font-size:0.8rem;">${item.ready}/${item.total}</td>`;
                     }
 
-                    // Build actions using _wBtn helper (data attributes, no inline quotes)
+                    // Build actions using _wBtn helper
                     let actions = '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
 
                     if (type === 'Deployment' || type === 'StatefulSet') {
-                        actions += _wBtn('btn btn-default', '&#8722;', 'scale-down', item.name, item.type);
-                        actions += _wBtn('btn btn-default', '&#43;', 'scale-up', item.name, item.type);
-                        actions += _wBtn('ai-btn ai-btn-analyze', '&#129302; AI Diagnose', 'diagnose-wl', item.name, item.type);
-                        actions += _wBtn('btn btn-default', 'Config', 'config', item.name, item.type);
-                        actions += `<button class="btn btn-default" style="font-size:12px;padding:3px 8px;" onclick="openYamlModal('${item.name}','${item.type}')">📄 YAML</button>`;
-                        actions += _wBtn('btn btn-default', '&#8635; Restart', 'restart', item.name, item.type);
-
+                        actions += _wBtn('action-btn', '&#8722;', 'scale-down', item.name, item.type);
+                        actions += _wBtn('action-btn', '&#43;', 'scale-up', item.name, item.type);
+                        actions += _wBtn('action-btn primary', '&#129302; AI Diagnose', 'diagnose-wl', item.name, item.type);
+                        actions += _wBtn('action-btn', 'Config', 'config', item.name, item.type);
+                        actions += `<button class="action-btn" style="font-size:0.7rem;padding:0.25rem 0.5rem;" onclick="openYamlModal('${item.name}','${item.type}')">📄 YAML</button>`;
+                        actions += _wBtn('action-btn', '&#8635; Restart', 'restart', item.name, item.type);
                         if (HEAL_STATUSES.has(item.status)) actions += _healBtn(item.name, item.type, item.status);
                     } else if (type === 'DaemonSet') {
-                        actions += _wBtn('ai-btn ai-btn-analyze', '&#129302; Analyze', 'analyze', item.name, 'DaemonSet');
-                        actions += _wBtn('ai-btn ai-btn-coverage', '&#128302; Coverage', 'ds-coverage', item.name, 'DaemonSet');
-                        actions += _wBtn('btn btn-default', 'Config', 'config', item.name, 'DaemonSet');
-
+                        actions += _wBtn('action-btn primary', '&#129302; Analyze', 'analyze', item.name, 'DaemonSet');
+                        actions += _wBtn('action-btn', '&#128302; Coverage', 'ds-coverage', item.name, 'DaemonSet');
+                        actions += _wBtn('action-btn', 'Config', 'config', item.name, 'DaemonSet');
                     } else if (type === 'Job') {
-                        actions += _wBtn('ai-btn ai-btn-insights', '&#129504; AI Insights', 'job-insights', item.name, 'Job');
-
+                        actions += _wBtn('action-btn primary', '&#129504; AI Insights', 'job-insights', item.name, 'Job');
                     } else if (type === 'Pod') {
                         const cjson = encodeURIComponent(JSON.stringify(item.containers || []));
-                        actions += `<button class="btn btn-primary" style="font-size:12px;padding:3px 8px;" data-wl-action="pod-console" data-wl-name="${item.name}" data-wl-kind="Pod" data-wl-cjson="${cjson}">Console</button>`;
-                        actions += _wBtn('btn btn-default', '&#128196; Logs', 'multi-logs', item.name, 'Pod');
-                        actions += _wBtn('ai-btn ai-btn-diagnose', '&#129692; Diagnose', 'diagnose', item.name, 'Pod');
-                        actions += _wBtn('ai-btn ai-btn-correlate', '&#128279; Correlate', 'correlate', item.name, 'Pod');
-                        actions += _wBtn('btn btn-default', 'Config', 'config', item.name, 'Pod');
+                        actions += `<button class="action-btn primary" data-wl-action="pod-console" data-wl-name="${item.name}" data-wl-kind="Pod" data-wl-cjson="${cjson}">Console</button>`;
+                        actions += _wBtn('action-btn', '&#128196; Logs', 'multi-logs', item.name, 'Pod');
+                        actions += _wBtn('action-btn primary', '&#129692; Diagnose', 'diagnose', item.name, 'Pod');
+                        actions += _wBtn('action-btn', '&#128279; Correlate', 'correlate', item.name, 'Pod');
+                        actions += _wBtn('action-btn', 'Config', 'config', item.name, 'Pod');
                         if (HEAL_STATUSES.has(item.status)) actions += _healBtn(item.name, 'Pod', item.status);
                     } else if (type === 'ConfigMap') {
-                        actions += _wBtn('btn btn-default', 'View', 'cm-view', item.name, 'ConfigMap');
-                        actions += _wBtn('ai-btn ai-btn-explain', '&#129504; Explain', 'explain-cm', item.name, 'ConfigMap');
-                        actions += _wBtn('ai-btn ai-btn-impact', '&#128279; Impact', 'cm-impact', item.name, 'ConfigMap');
+                        actions += _wBtn('action-btn', 'View', 'cm-view', item.name, 'ConfigMap');
+                        actions += _wBtn('action-btn primary', '&#129504; Explain', 'explain-cm', item.name, 'ConfigMap');
+                        actions += _wBtn('action-btn', '&#128279; Impact', 'cm-impact', item.name, 'ConfigMap');
                     } else if (type === 'Secret') {
-                        actions += _wBtn('btn btn-default', 'View', 'secret-view', item.name, 'Secret');
-                        actions += _wBtn('ai-btn ai-btn-risk', '&#9888; Risk Scan', 'explain-secret', item.name, 'Secret');
-                        actions += _wBtn('ai-btn ai-btn-audit', '&#128274; Audit', 'secret-audit', item.name, 'Secret');
+                        actions += _wBtn('action-btn', 'View', 'secret-view', item.name, 'Secret');
+                        actions += _wBtn('action-btn', '&#9888; Risk Scan', 'explain-secret', item.name, 'Secret');
+                        actions += _wBtn('action-btn', '&#128274; Audit', 'secret-audit', item.name, 'Secret');
                     }
 
                     actions += '</div>';
@@ -4242,21 +4283,21 @@
                         const entries = Object.entries(lbls).filter(([k]) =>
                             !['pod-template-hash', 'controller-revision-hash'].includes(k));
                         const inner = entries.length
-                            ? entries.map(([k, v]) => `<span style="display:inline-block;background:var(--badge-bg,rgba(99,102,241,0.1));color:var(--text-primary,#e2e8f0);border:1px solid var(--border-color,rgba(99,102,241,0.25));border-radius:10px;padding:1px 7px;font-size:10px;margin:1px 1px 1px 0;white-space:nowrap;font-family:monospace;">${k}=${v}</span>`).join('')
-                            : '<span style="color:#5e6178;font-size:11px;">—</span>';
+                            ? entries.map(([k, v]) => `<span style="display:inline-block;background:rgba(99,102,241,0.1);color:var(--text-primary);border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:1px 7px;font-size:0.65rem;margin:1px 1px 1px 0;white-space:nowrap;font-family:monospace;">${k}=${v}</span>`).join('')
+                            : '<span style="color:var(--text-muted);font-size:0.7rem;">—</span>';
                         labelsCell = `<td style="max-width:260px;vertical-align:middle;">${inner}</td>`;
                     }
                     // Name cell — clickable for Deployment/StatefulSet to navigate to related pods
                     let nameCell;
                     if (type === 'Deployment' || type === 'StatefulSet') {
-                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:var(--text-primary,#e2e8f0);text-decoration:none;cursor:pointer;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'" title="View pods for ${item.name}">${item.name}</a></td>`;
+                        nameCell = `<td class="name"><a href="#" onclick="navigateToPods('${item.name}');return false;" style="color:var(--text-primary);text-decoration:none;" onmouseover="this.style.color='var(--accent)';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--text-primary)';this.style.textDecoration='none'" title="View pods for ${item.name}">${item.name}</a></td>`;
                     } else {
-                        nameCell = `<td style="font-weight:600;max-width:200px;word-break:break-word;">${item.name}</td>`;
+                        nameCell = `<td class="name">${item.name}</td>`;
                     }
-                    html += `<tr>${nameCell}${statusCell}${readyCell}${labelsCell}<td style="color:#888;font-size:12px;">${item.age || '--'}</td><td>${actions}</td></tr>`;
+                    html += `<tr>${nameCell}${statusCell}${readyCell}${labelsCell}<td style="font-size:0.75rem;color:var(--text-muted);">${item.age || '--'}</td><td>${actions}</td></tr>`;
                 });
 
-                html += '</tbody></table>';
+                html += '</tbody></table></div>';
                 container.innerHTML = html;
 
                 // Restore search term and re-apply filter
