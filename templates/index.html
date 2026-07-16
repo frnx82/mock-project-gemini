@@ -6,2726 +6,487 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GDC Dashboard</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        /* ── Design Tokens ────────────────────────────────────── */
+        :root {
+            --bg-page: #0b1120;
+            --bg-sidebar: #0f1629;
+            --bg-surface: #0f1629;
+            --bg-card: rgba(255,255,255,0.04);
+            --bg-card-hover: rgba(255,255,255,0.07);
+            --bg-input: rgba(255,255,255,0.06);
+            --bg-hover: rgba(255,255,255,0.05);
+            --border: rgba(255,255,255,0.08);
+            --border-active: rgba(6,182,212,0.4);
+            --accent: #06b6d4;
+            --accent-glow: rgba(6,182,212,0.15);
+            --accent-text: #06b6d4;
+            --green: #22c55e;
+            --amber: #f59e0b;
+            --red: #ef4444;
+            --orange: #f97316;
+            --purple: #a855f7;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --radius-xs: 6px;
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ── Reset ────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; }
+
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            margin: 20px;
+            font-family: var(--font);
+            margin: 0;
+            padding: 0;
             background-color: var(--bg-page);
+            color: var(--text-primary);
             font-variant-numeric: tabular-nums;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
         }
 
-        h1 {
+        h1 { color: var(--text-primary); margin: 0; }
+
+        /* ── Scrollbar ────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* ── Sidebar ──────────────────────────────────────────── */
+        .gdc-sidebar {
+            width: 220px;
+            min-width: 220px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 1.25rem 0;
+            z-index: 100;
+        }
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        .logo-text { font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; color: var(--text-primary); }
+        .logo-sub { font-size: 0.65rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+        .nav-section { padding: 0 0.75rem; margin-bottom: 0.5rem; }
+        .nav-label { font-size: 0.65rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; padding: 0.5rem; }
+        .nav-item {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.6rem 0.75rem; border-radius: var(--radius-sm);
+            color: var(--text-secondary); font-size: 0.825rem; font-weight: 500;
+            cursor: pointer; transition: all var(--transition);
+            text-decoration: none; position: relative;
+            border: none; background: none; width: 100%; text-align: left;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        .nav-item.active {
+            background: var(--accent-glow);
+            color: var(--accent);
+        }
+        .nav-item.active::before {
+            content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+            width: 3px; height: 60%; background: var(--accent); border-radius: 0 3px 3px 0;
+        }
+        .nav-icon { width: 18px; height: 18px; opacity: 0.7; flex-shrink: 0; }
+        .nav-item.active .nav-icon { opacity: 1; }
+        .nav-badge {
+            margin-left: auto; font-size: 0.65rem; font-weight: 600;
+            background: var(--red); color: #fff; padding: 1px 6px; border-radius: 10px;
+        }
+        .sidebar-footer {
+            margin-top: auto; padding: 1rem 1.25rem;
+            border-top: 1px solid var(--border);
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .user-avatar {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 700; color: #fff;
+        }
+        .user-name { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); }
+        .user-role { font-size: 0.65rem; color: var(--text-muted); }
+
+        /* ── Main Layout ──────────────────────────────────────── */
+        .gdc-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+        /* ── Top Bar ──────────────────────────────────────────── */
+        .gdc-topbar {
+            display: flex; align-items: center; gap: 1rem;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: rgba(15,22,41,0.8);
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+        }
+        .topbar-section { display: flex; align-items: center; gap: 0.75rem; }
+        .namespace-selector-wrap {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: var(--bg-input); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 0.4rem 0.75rem;
+        }
+        .namespace-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+        #namespace-select {
+            background: transparent; border: none; outline: none;
+            color: var(--text-primary); font-size: 0.8rem; font-family: var(--font);
+            cursor: pointer; -webkit-appearance: none; appearance: none;
+            padding-right: 1rem;
+        }
+        #namespace-select option { background: var(--bg-sidebar); color: var(--text-primary); }
+
+        .topbar-search-wrap {
+            flex: 1; max-width: 500px; margin-left: auto;
+        }
+        .topbar-right {
+            display: flex; align-items: center; gap: 0.75rem; margin-left: auto;
+        }
+        .topbar-btn {
+            width: 34px; height: 34px; border-radius: var(--radius-xs);
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text-secondary); display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all var(--transition); font-size: 14px;
+        }
+        .topbar-btn:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+
+        /* ── Content Area ─────────────────────────────────────── */
+        .gdc-content {
+            flex: 1; overflow-y: auto; overflow-x: hidden;
+            padding: 1.5rem;
+        }
+
+        /* ── Dashboard Container (override old layout) ────────── */
+        .dashboard-container { display: block !important; }
+
+        /* ── Panels / Cards ───────────────────────────────────── */
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            backdrop-filter: blur(8px);
+            transition: all var(--transition);
+            box-shadow: none;
+        }
+        .panel:hover { border-color: rgba(255,255,255,0.12); }
+        .panel-header {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
             color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
 
-        /* Tabs */
+        /* ── Tabs (Workload sub-tabs, etc.) ───────────────────── */
         .panel-tabs {
             display: flex;
-            border-bottom: 2px solid var(--border);
-            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
             overflow-x: auto;
+            gap: 0.25rem;
         }
-
         .tab-btn {
-            padding: 8px 16px;
+            padding: 0.5rem 1rem;
             cursor: pointer;
             border: none;
             background: none;
-            font-weight: 600;
-            color: var(--text-secondary);
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-            white-space: nowrap;
-            transition: color 0.2s, background-color 0.2s;
-            border-radius: 6px 6px 0 0;
-            font-size: 13px;
-        }
-
-        .tab-btn:hover {
-            color: var(--accent);
-            background-color: var(--bg-hover);
-        }
-
-        .tab-btn.active {
-            color: var(--accent);
-            border-bottom: 2px solid var(--accent);
-        }
-
-        .tab-content {
-            display: none;
-            animation: fadein 0.3s;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        @keyframes fadein {
-            from {
-                opacity: 0;
-            }
-
-            to {
-                opacity: 1;
-            }
-        }
-
-        /* Layout */
-        .dashboard-container {
-            display: flex;
-            gap: 20px;
-            align-items: flex-start;
-        }
-
-        .panel {
-            flex: 1;
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 18px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.08);
-            min-width: 0;
-            backdrop-filter: blur(8px);
-            transition: box-shadow 0.2s ease;
-        }
-
-        .panel-header {
-            font-size: 1.15em;
-            font-weight: 700;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--border);
-            color: var(--text-primary);
-            letter-spacing: -0.2px;
-        }
-
-        .section-title {
-            font-size: 0.8em;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-top: 20px;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-
-        /* Navigation */
-        .nav-bar {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .nav-btn {
-            padding: 10px 20px;
-            border: 1px solid var(--border);
-            background-color: var(--bg-elevated);
-            color: var(--text-secondary);
-            cursor: pointer;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
-            transition: all 0.2s ease;
-        }
-
-        .nav-btn.active {
-            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-            color: white;
-            border-color: transparent;
-            box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
-        }
-
-        .nav-btn:hover:not(.active) {
-            background-color: var(--bg-hover);
-            border-color: var(--border-light);
-        }
-
-        /* Table */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-        }
-
-        th,
-        td {
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border);
-            text-align: left;
-            font-size: 13px;
-        }
-
-        th {
-            background-color: var(--bg-elevated);
-            font-weight: 600;
-            color: var(--text-secondary);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        tr:hover {
-            background-color: var(--bg-hover);
-        }
-
-        /* Status Colors */
-        .status-running {
-            color: var(--success);
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .status-running::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--success);
-            display: inline-block;
-        }
-
-        .status-pending {
-            color: var(--warning);
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .status-pending::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--warning);
-            display: inline-block;
-            animation: pulse-dot 1.5s infinite;
-        }
-
-        .status-failed {
-            color: var(--danger);
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .status-failed::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--danger);
-            display: inline-block;
-        }
-
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        /* Buttons */
-        .btn {
-            padding: 6px 14px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
             font-weight: 500;
-            margin-right: 5px;
-            transition: all 0.2s ease;
-            font-family: inherit;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-            color: white;
-            box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
-        }
-
-        .btn-default {
-            background-color: var(--bg-elevated);
-            color: var(--text-secondary);
-            border: 1px solid var(--border);
-        }
-
-        .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-        }
-
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        /* Modals */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 100;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.4);
-        }
-
-        .modal-content {
-            background-color: var(--bg-surface);
-            margin: 5% auto;
-            padding: 24px;
-            border: 1px solid var(--border);
-            width: 80%;
-            border-radius: 14px;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 1px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(12px);
-        }
-
-        .close {
             color: var(--text-muted);
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: color 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            white-space: nowrap;
+            transition: all var(--transition);
+            border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+            font-size: 0.8rem;
+            font-family: var(--font);
         }
+        .tab-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
-        .close:hover {
+        .tab-content { display: none; animation: fadein 0.3s; }
+        .tab-content.active { display: block; }
+
+        @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+        /* ── Tables ───────────────────────────────────────────── */
+        .table { width: 100%; border-collapse: collapse; }
+        .table th {
+            text-align: left;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.65rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+        }
+        .table td {
+            padding: 0.6rem 0.75rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            vertical-align: middle;
+        }
+        .table tr:hover td { background: rgba(255,255,255,0.03); color: var(--text-primary); }
+        .table th:first-child, .table td:first-child { padding-left: 1rem; }
+
+        /* ── Buttons ──────────────────────────────────────────── */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 0.45rem 1rem;
+            border-radius: var(--radius-xs);
+            font-size: 0.8rem;
+            font-weight: 500;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: all var(--transition);
+            border: 1px solid var(--border);
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #0b1120;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+        .btn-primary:hover { filter: brightness(1.15); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-primary);
+            border-color: var(--border);
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+        .btn-default {
+            background: transparent;
+            color: var(--text-secondary);
+            border-color: var(--border);
+        }
+        .btn-default:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--red); border-color: rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+        /* ── Status Badges ────────────────────────────────────── */
+        .status-healthy, .status-running { color: var(--green); }
+        .status-warning, .status-pending { color: var(--amber); }
+        .status-error, .status-failed, .status-crashloop { color: var(--red); }
+
+        /* ── Modals ───────────────────────────────────────────── */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            justify-content: center; align-items: center;
+        }
+        .modal-content, .modal-body-inner {
+            background: var(--bg-sidebar);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+        }
+        .modal-header {
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
             color: var(--text-primary);
         }
 
-        .container-badge {
-            display: inline-block;
-            background: var(--bg-elevated);
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-size: 0.85em;
-            margin-right: 5px;
+        /* ── AI Search Bar (command palette) ──────────────────── */
+        #ask-ai-wrap {
+            width: 100%;
+        }
+        #ask-ai-outer {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: var(--bg-input); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 0.45rem 0.75rem;
+            transition: border-color var(--transition);
+        }
+        #ask-ai-outer:focus-within { border-color: var(--accent); }
+        #ai-query-input {
+            background: transparent; border: none; outline: none;
+            color: var(--text-primary); font-size: 0.8rem; font-family: var(--font);
+            width: 100%;
+        }
+        #ai-query-input::placeholder { color: var(--text-muted); }
+        #ask-ai-icon { font-size: 14px; }
+
+        /* ── AI Suggestions ───────────────────────────────────── */
+        #ask-ai-suggestions {
+            background: var(--bg-sidebar); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        #ask-ai-suggestions [role="option"] {
+            color: var(--text-secondary);
+            transition: background var(--transition);
+        }
+        #ask-ai-suggestions [role="option"]:hover,
+        #ask-ai-suggestions [role="option"].selected {
+            background: var(--accent-glow); color: var(--accent);
+        }
+
+        /* ── AI Chat Drawer ───────────────────────────────────── */
+        #chatDrawer {
+            background: var(--bg-sidebar) !important;
+            border-left: 1px solid var(--border) !important;
+            box-shadow: -4px 0 24px rgba(0,0,0,0.3) !important;
+        }
+        #chatDrawer input, #chatDrawer textarea {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-family: var(--font);
+        }
+
+        /* ── Toast ────────────────────────────────────────────── */
+        .toast {
+            background: var(--bg-sidebar);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        /* ── Spinner ──────────────────────────────────────────── */
+        .spinner {
+            border-color: rgba(255,255,255,0.1);
+            border-top-color: var(--accent);
+        }
+
+        /* ── Security Section ─────────────────────────────────── */
+        .sec-pill {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            transition: all var(--transition);
+            cursor: pointer;
+        }
+        .sec-pill:hover { background: var(--bg-card-hover); }
+        .sec-assessment-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+
+        /* ── Optimizer Section ────────────────────────────────── */
+        .opt-cost-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+        .opt-filter-btn {
+            background: var(--bg-card);
             border: 1px solid var(--border);
             color: var(--text-secondary);
+            border-radius: var(--radius-xs);
+            font-family: var(--font);
+            cursor: pointer;
+            transition: all var(--transition);
         }
+        .opt-filter-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .opt-filter-btn.active { background: var(--accent-glow); color: var(--accent); border-color: var(--border-active); }
 
-        #cm-content {
-            white-space: pre-wrap;
-            font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-            background: var(--bg-elevated);
-            padding: 12px;
-            border-radius: 8px;
+        /* ── Health Pulse Banner ───────────────────────────────── */
+        #health-pulse-banner, #net-health-banner {
+            background: var(--bg-card);
             border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+        }
+
+        /* ── Help Modal Chips ─────────────────────────────────── */
+        .help-chip {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+        .help-chip:hover { background: var(--accent-glow); color: var(--accent); border-color: var(--border-active); }
+
+        /* ── Confirm Dialog ───────────────────────────────────── */
+        .confirm-overlay {
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+        }
+        .confirm-dialog {
+            background: var(--bg-sidebar);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             color: var(--text-primary);
-            font-size: 12px;
         }
 
-        /* Gemini Chat Drawer */
-        #chat-panel {
-            position: fixed;
-            right: -420px;
-            top: 0;
-            bottom: 0;
-            width: 400px;
-            max-height: 100vh;
-            background: var(--bg-surface);
-            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
-            z-index: 1900;
-            display: flex;
-            flex-direction: column;
-            transition: right 0.3s ease;
-            border-left: 1px solid var(--border-color, #2a2b45);
+        /* ── Pod Status Summary (topbar) ──────────────────────── */
+        #pod-status-summary {
+            font-size: 0.75rem;
         }
 
-        #chat-panel.open {
-            right: 0 !important;
+        /* ── Code / Pre ───────────────────────────────────────── */
+        pre, code {
+            background: rgba(0,0,0,0.3);
+            border-radius: var(--radius-xs);
+            color: var(--accent);
+            font-size: 0.8rem;
         }
 
-        #chat-header {
-            background: linear-gradient(135deg, #4285f4, #0f9d58);
-            color: white;
-            padding: 14px 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: 600;
-            font-size: 15px;
-        }
+        /* ── Old Top-Level Tab Bar (hidden — sidebar replaces it) ── */
+        .old-tab-bar { display: none !important; }
 
-        #chat-messages {
-            flex: 1 1 0;
-            min-height: 0;
-            overflow-y: auto;
-            padding: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            background: #f8f9fa;
-        }
+        /* ── Theme toggle (removed — dark only) ───────────────── */
+        .theme-toggle { display: none !important; }
 
-        .chat-bubble {
-            padding: 10px 14px;
-            border-radius: 16px;
-            font-size: 13px;
-            max-width: 90%;
-            word-wrap: break-word;
-            line-height: 1.5;
-        }
+        /* ── Animations ───────────────────────────────────────── */
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .panel { animation: slideIn 0.3s ease; }
 
-        .chat-bubble.user {
-            background: #4285f4;
-            color: white;
-            align-self: flex-end;
-            border-bottom-right-radius: 4px;
+        /* ── Select elements ──────────────────────────────────── */
+        select {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            padding: 0.4rem 0.6rem;
+            font-family: var(--font);
+            font-size: 0.8rem;
         }
+        select option { background: var(--bg-sidebar); }
 
-        .chat-bubble.assistant {
-            background: var(--bg-surface);
-            color: var(--text-primary, #e0e0e0);
-            align-self: flex-start;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        #chat-input-area {
-            padding: 12px;
-            border-top: 1px solid var(--border-color, #2a2b45);
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
-        #chat-input {
-            flex: 1;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            font-size: 13px;
+        /* ── Input elements ───────────────────────────────────── */
+        input[type="text"], input[type="number"], textarea {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            font-family: var(--font);
             outline: none;
         }
-
-        #chat-input:focus {
-            border-color: #4285f4;
-        }
-
-        #chat-send-btn {
-            background: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            min-width: 72px;
-            height: 36px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            padding: 0 14px;
-            flex-shrink: 0;
-        }
-
-        #yaml-prompt {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-            resize: vertical;
-            min-height: 80px;
-        }
-
-        /* ── AI Analysis Modal ── */
-        .health-badge {
-            display: inline-block;
-            padding: 4px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }
-
-        .health-healthy {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .health-degraded {
-            background: rgba(255, 193, 7, 0.15);
-            color: #ffc107;
-        }
-
-        .health-critical {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .health-unknown {
-            background: #e2e3e5;
-            color: #383d41;
-        }
-
-        .health-score-ring {
-            width: 70px;
-            height: 70px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            font-weight: 800;
-            flex-shrink: 0;
-        }
-
-        .risk-card {
-            border-left: 4px solid #dee2e6;
-            background: #f8f9fa;
-            border-radius: 0 6px 6px 0;
-            padding: 10px 14px;
-            margin: 6px 0;
-            font-size: 13px;
-        }
-
-        .risk-critical {
-            border-color: #dc3545;
-        }
-
-        .risk-high {
-            border-color: #fd7e14;
-        }
-
-        .risk-medium {
-            border-color: #ffc107;
-        }
-
-        .risk-low {
-            border-color: #28a745;
-        }
-
-        /* ── Job status badges ── */
-        .job-status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 3px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .job-succeeded {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .job-running {
-            background: #cce5ff;
-            color: #004085;
-        }
-
-        .job-failed {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .job-pending {
-            background: rgba(255, 193, 7, 0.15);
-            color: #ffc107;
-        }
-
-        /* ── Container log tabs ── */
-        .container-log-tab {
-            padding: 5px 12px;
-            cursor: pointer;
-            border: 1px solid #ddd;
-            border-radius: 4px 4px 0 0;
-            margin-right: 4px;
-            background: #f8f9fa;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .container-log-tab.active {
-            background: #1e1e2e;
-            color: #cdd6f4;
-            border-color: #1e1e2e;
-        }
-
-        .ai-btn {
-            font-size: 12px;
-            padding: 3px 9px;
-            border-radius: 4px;
-            cursor: pointer;
-            border: none;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .ai-btn-analyze {
-            background: linear-gradient(135deg, #6f42c1, #4285f4);
-            color: #fff;
-        }
-
-        .ai-btn-diagnose {
-            background: linear-gradient(135deg, #dc3545, #fd7e14);
-            color: #fff;
-        }
-
-        .ai-btn-insights {
-            background: linear-gradient(135deg, #28a745, #17a2b8);
-            color: #fff;
-        }
-
-        .ai-btn-explain {
-            background: linear-gradient(135deg, #17a2b8, #4285f4);
-            color: #fff;
-        }
-
-        .ai-btn-risk {
-            background: linear-gradient(135deg, #dc3545, #6f42c1);
-            color: #fff;
-        }
-
-        .ai-btn-correlate {
-            background: linear-gradient(135deg, #fd7e14, #dc3545);
-            color: #fff;
-        }
-
-        .ai-btn-health {
-            background: linear-gradient(135deg, #0f9d58, #17a2b8);
-            color: #fff;
-        }
-
-        .ai-btn-coverage {
-            background: linear-gradient(135deg, #4285f4, #17a2b8);
-            color: #fff;
-        }
-
-        .ai-btn-triage {
-            background: linear-gradient(135deg, #e83e8c, #dc3545);
-            color: #fff;
-        }
-
-        .ai-btn-impact {
-            background: linear-gradient(135deg, #fd7e14, #ffc107);
-            color: #fff;
-        }
-
-        .ai-btn-audit {
-            background: linear-gradient(135deg, #4a00e0, #dc3545);
-            color: #fff;
-        }
-
-        .ai-btn-route {
-            background: linear-gradient(135deg, #0f9d58, #00bcd4);
-            color: #fff;
-        }
-
-        .ai-btn-policy {
-            background: linear-gradient(135deg, #00bcd4, #4285f4);
-            color: #fff;
-        }
-
-        .ai-btn-dep {
-            background: linear-gradient(135deg, #4285f4, #6f42c1);
-            color: #fff;
-        }
-
-        .ai-btn-heal {
-            background: linear-gradient(135deg, #dc3545, #e6a000);
-            color: #fff;
-            animation: heal-pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes heal-pulse {
-
-            0%,
-            100% {
-                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.35);
-            }
-
-            50% {
-                box-shadow: 0 0 0 5px rgba(220, 53, 69, 0);
-            }
-        }
-
-        .heal-risk-badge {
-            display: inline-block;
-            padding: 2px 9px;
-            border-radius: 10px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: .4px;
-            text-transform: uppercase;
-        }
-
-        .heal-risk-low {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .heal-risk-medium {
-            background: rgba(255, 193, 7, 0.15);
-            color: #ffc107;
-        }
-
-        .heal-risk-high {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        @keyframes pulse-skeleton {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.4;
-            }
-        }
-
-        .kubectl-hint {
-            background: #1e1e2e;
-            color: #cdd6f4;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 12px;
-            margin: 3px 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .copy-btn {
-            background: none;
-            border: 1px solid #6f42c1;
-            color: #6f42c1;
-            border-radius: 3px;
-            padding: 1px 6px;
-            cursor: pointer;
-            font-size: 11px;
-        }
-
-        .copy-btn:hover {
-            background: #6366f1;
-            color: #fff;
-        }
-
-        /* ═══════════════════════════════════════════════════════════════════
-           DARK THEME OVERRIDE — Professional Enterprise Redesign
-           Overrides all light-mode styles above.  No JS changes needed.
-           ═══════════════════════════════════════════════════════════════════ */
-        :root {
-            --bg-page: #0f1117;
-            --bg-surface: #1a1b2e;
-            --bg-elevated: #1e1f35;
-            --bg-hover: #262840;
-            --border: #2a2b45;
-            --border-light: #353660;
-            --text-primary: #e2e4e9;
-            --text-secondary: #8b8fa3;
-            --text-muted: #5e6178;
-            --accent: #6366f1;
-            --accent-hover: #818cf8;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #3b82f6;
-        }
-
-        /* ── Light Mode Variable Overrides ───────────────────────── */
-        body.light-mode {
-            --bg-page: #f5f6fa;
-            --bg-surface: #ffffff;
-            --bg-elevated: #ffffff;
-            --bg-hover: #f0f1f5;
-            --border: #dde1e8;
-            --border-light: #e8ecf1;
-            --text-primary: #1a1c24;
-            --text-secondary: #5a5f72;
-            --text-muted: #8b8fa3;
-            --accent: #4f46e5;
-            --accent-hover: #6366f1;
-            --success: #16a34a;
-            --warning: #d97706;
-            --danger: #dc2626;
-            --info: #2563eb;
-        }
-
-        /* Light mode: help-chip adjustments */
-        body.light-mode .help-chip {
-            background: #f0f1f5;
-            border-color: #dde1e8;
-            color: #444;
-        }
-
-        body.light-mode .help-chip:hover {
-            background: #e8f0fe;
-            border-color: #4f46e5;
-            color: #4f46e5;
-        }
-
-        /* Light mode: code inline blocks */
-        body.light-mode code {
-            background: rgba(79, 70, 229, 0.08) !important;
-            color: #4f46e5 !important;
-        }
-
-        /* ── Light Mode: Nuclear Override for all hardcoded dark inline styles ── */
-        /* Catches all [style*="background:#1..."] / [style*="color:#e2..."] etc. */
-
-        /* Dark backgrounds → white/light */
-        body.light-mode [style*="background:#0f1117"],
-        body.light-mode [style*="background: #0f1117"],
-        body.light-mode [style*="background-color:#0f1117"],
-        body.light-mode [style*="background-color: #0f1117"],
-        body.light-mode [style*="background:#1a1b2e"],
-        body.light-mode [style*="background: #1a1b2e"],
-        body.light-mode [style*="background-color:#1a1b2e"],
-        body.light-mode [style*="background-color: #1a1b2e"],
-        body.light-mode [style*="background:#1e1f35"],
-        body.light-mode [style*="background: #1e1f35"],
-        body.light-mode [style*="background-color:#1e1f35"],
-        body.light-mode [style*="background-color: #1e1f35"],
-        body.light-mode [style*="background:#262840"],
-        body.light-mode [style*="background: #262840"],
-        body.light-mode [style*="background-color:#262840"],
-        body.light-mode [style*="background-color: #262840"] {
-            background: #ffffff !important;
-            background-color: #ffffff !important;
-        }
-
-        /* Secondary dark backgrounds → light gray */
-        body.light-mode [style*="background:#2a2b45"],
-        body.light-mode [style*="background: #2a2b45"],
-        body.light-mode [style*="background-color:#2a2b45"],
-        body.light-mode [style*="background-color: #2a2b45"],
-        body.light-mode [style*="background:#353660"],
-        body.light-mode [style*="background: #353660"] {
-            background: #f0f1f5 !important;
-            background-color: #f0f1f5 !important;
-        }
-
-        /* Dark borders → light borders */
-        body.light-mode [style*="border:1px solid #2a2b45"],
-        body.light-mode [style*="border: 1px solid #2a2b45"],
-        body.light-mode [style*="border-color:#2a2b45"],
-        body.light-mode [style*="border-color: #2a2b45"],
-        body.light-mode [style*="border:1px solid #353660"],
-        body.light-mode [style*="border: 1px solid #353660"] {
-            border-color: #dde1e8 !important;
-        }
-
-        /* Light text → dark text */
-        body.light-mode [style*="color:#e2e4e9"],
-        body.light-mode [style*="color: #e2e4e9"] {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode [style*="color:#8b8fa3"],
-        body.light-mode [style*="color: #8b8fa3"] {
-            color: #5a5f72 !important;
-        }
-
-        body.light-mode [style*="color:#5e6178"],
-        body.light-mode [style*="color: #5e6178"] {
-            color: #8b8fa3 !important;
-        }
-
-        /* Label badges in light mode */
-        body.light-mode .label-badge {
-            background: rgba(79, 70, 229, 0.1) !important;
-            color: #4f46e5 !important;
-            border-color: rgba(79, 70, 229, 0.2) !important;
-        }
-
-        /* Health pulse banners — light mode */
-        body.light-mode #health-pulse-content,
-        body.light-mode #net-health-content {
-            background: #ffffff !important;
-            border-color: #dde1e8 !important;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, .06) !important;
-        }
-
-        body.light-mode #pulse-score-text,
-        body.light-mode #net-score-text {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode #pulse-summary-text,
-        body.light-mode #net-summary-text {
-            color: #5a5f72 !important;
-        }
-
-        /* Tab buttons in light mode */
-        body.light-mode .top-tab-btn {
-            background: #ffffff !important;
-            color: #5a5f72 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode .top-tab-btn:hover {
-            border-color: #4f46e5 !important;
-            color: #4f46e5 !important;
-        }
-
-        body.light-mode .top-tab-btn.active {
-            background: #4f46e5 !important;
-            color: #fff !important;
-            border-color: #4f46e5 !important;
-        }
-
-        /* Search inputs in JS-generated tables */
-        body.light-mode input[type="text"][id^="wl-search"],
-        body.light-mode input[type="text"][id^="svc-search"],
-        body.light-mode input[type="text"][id^="vs-search"] {
-            background: #ffffff !important;
-            color: #1a1c24 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode input[type="text"][id^="wl-search"]:focus,
-        body.light-mode input[type="text"][id^="svc-search"]:focus,
-        body.light-mode input[type="text"][id^="vs-search"]:focus {
-            border-color: #4f46e5 !important;
-        }
-
-        /* Security scan category badges/pills */
-        body.light-mode .sec-cat-btn {
-            background: #f0f1f5 !important;
-            color: #5a5f72 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode .sec-cat-btn:hover,
-        body.light-mode .sec-cat-btn.active {
-            background: #4f46e5 !important;
-            color: #fff !important;
-        }
-
-        /* Modal content in light mode */
-        body.light-mode .modal-content {
-            background: #ffffff !important;
-            border-color: #dde1e8 !important;
-            color: #1a1c24 !important;
-        }
-
-        /* Pod Status summary box */
-        body.light-mode #pod-status-summary {
-            color: #1a1c24 !important;
-        }
-
-        /* Select dropdown in light mode */
-        body.light-mode select {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode option {
-            background: #ffffff !important;
-            color: #1a1c24 !important;
-        }
-
-        /* Namespace label */
-        body.light-mode label[for="namespace-select"] {
-            color: #5a5f72 !important;
-        }
-
-        /* Dashboard container background */
-        body.light-mode .dashboard-container {
-            background: transparent !important;
-        }
-
-        /* ── AI Chat panel (light mode) ───────────────────────── */
-        /* Keep the purple gradient header so white labels stay visible */
-        body.light-mode #chat-header {
-            background: linear-gradient(135deg, #4a00e0, #6f42c1) !important;
-            border-bottom: 1px solid #5a2dba !important;
-        }
-
-        body.light-mode #chat-panel {
-            background: #ffffff !important;
-            border-left: 1px solid #dde1e8 !important;
-            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08) !important;
-        }
-
-        body.light-mode #chat-messages {
-            background: #f5f6fa !important;
-        }
-
-        body.light-mode .chat-bubble.assistant {
-            background: #ffffff !important;
-            color: #1a1c24 !important;
-            border: 1px solid #dde1e8 !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
-        }
-
-        body.light-mode .chat-bubble.user {
-            background: #4f46e5 !important;
-            color: #fff !important;
-        }
-
-        body.light-mode #chat-input {
-            background: #ffffff !important;
-            color: #1a1c24 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode #chat-input:focus {
-            border-color: #4f46e5 !important;
-        }
-
-        body.light-mode #chat-input-area {
-            background: #ffffff !important;
-            border-top-color: #dde1e8 !important;
-        }
-
-        body.light-mode #chat-send-btn {
-            background: #4f46e5 !important;
-        }
-
-        body.light-mode .chat-chip {
-            background: #f0f1f5 !important;
-            color: #4f46e5 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode .chat-chip:hover {
-            background: #4f46e5 !important;
-            color: #fff !important;
-        }
-
-        body.light-mode .chat-ts {
-            color: #8b8fa3 !important;
-        }
-
-        body.light-mode #chat-footer-label {
-            color: #8b8fa3 !important;
-        }
-
-        /* JS-generated dark gradient panels (Security Assessment, AI toasts, cost cards) */
-        body.light-mode [style*="background:linear-gradient(135deg,#1a1a2e"],
-        body.light-mode [style*="background: linear-gradient(135deg, #1a1a2e"],
-        body.light-mode [style*="background:linear-gradient(135deg,#1a2e1a"],
-        body.light-mode [style*="background: linear-gradient(135deg, #1a2e1a"],
-        body.light-mode [style*="background:linear-gradient(135deg,#16213e"],
-        body.light-mode [style*="background: linear-gradient(135deg, #16213e"] {
-            background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
-            color: #1a1c24 !important;
-        }
-
-        /* ── Dark code/monospace cells (reusable class) ─────────── */
-        .dark-code-cell {
-            font-family: monospace;
-            font-size: 12px;
-            background: #1a1a2e;
-            color: #cdd6f4;
-            border-radius: 4px;
-            padding: 4px 6px;
-        }
-
-        body.light-mode .dark-code-cell {
-            background: #f0f1f5 !important;
-            color: #1a1c24 !important;
-        }
-
-        /* Direct ID overrides for stubborn inline styles */
-        body.light-mode #yaml-gen-output {
-            background: #f8f9fb !important;
-            color: #1a1c24 !important;
-            border: 1px solid #dde1e8 !important;
-        }
-
-        body.light-mode #sec-summary-card,
-        body.light-mode #sec-summary-card * {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode #sec-summary-card {
-            background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
-        }
-
-        /* ── Security Assessment card ───────────────────────────── */
-        .sec-assessment-card {
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            color: #e0e0e0;
-        }
-
-        body.light-mode .sec-assessment-card {
-            background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode .sec-assessment-card * {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode .sec-assessment-card strong[style*="color:#a78bfa"] {
-            color: #4f46e5 !important;
-        }
-
-        body.light-mode #sec-summary-card {
-            background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode #sec-summary-card p,
-        body.light-mode #sec-summary-card strong {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode #sec-summary-card strong[style*="color:#a78bfa"] {
-            color: #4f46e5 !important;
-        }
-
-        /* ── Security insight rows ──────────────────────────────── */
-        body.light-mode .sec-insight-row td {
-            background: #f5f3ff !important;
-            color: #5a5f72 !important;
-        }
-
-        /* ── Security reference badges ──────────────────────────── */
-        body.light-mode .sec-ref {
-            background: #e8ecf1 !important;
-            color: #5a5f72 !important;
-        }
-
-        body.light-mode a[style*="background:#333"] {
-            background: #e8ecf1 !important;
-            color: #4f46e5 !important;
-        }
-
-        /* ── Optimizer cost cards ───────────────────────────────── */
-        body.light-mode .opt-cost-card {
-            background: #ffffff !important;
-            border-color: #dde1e8 !important;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-        }
-
-        body.light-mode .opt-cost-label {
-            color: #5a5f72 !important;
-        }
-
-        body.light-mode .opt-cost-value {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode .opt-cost-sub {
-            color: #6b7280 !important;
-        }
-
-        /* ── Optimizer header panel ────────────────────────────── */
-        body.light-mode #view-optimizer .panel-header,
-        body.light-mode #view-optimizer [style*="background:#1a1b2e"] {
-            background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
-            color: #ffffff !important;
-            border-color: #4338ca !important;
-        }
-
-        body.light-mode #view-optimizer .panel-header span {
-            color: #ffffff !important;
-        }
-
-        /* ── Optimizer AI-Powered / AI Estimation badges ────────── */
-        body.light-mode #opt-gemini-badge {
-            background: rgba(255,255,255,0.3) !important;
-            color: #ffffff !important;
-            font-weight: 600;
-        }
-
-        body.light-mode #opt-source-badge {
-            background: rgba(255,255,255,0.25) !important;
-            color: #ffffff !important;
-            font-weight: 600;
-        }
-
-        /* ── Optimizer summary card ─────────────────────────────── */
-        body.light-mode #opt-summary-card {
-            background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
-            color: #065f46 !important;
-        }
-
-        body.light-mode #opt-summary-card span {
-            color: #065f46 !important;
-        }
-
-        /* ── Optimizer config badges (monospace req/lim boxes) ─── */
-        body.light-mode .opt-config-box {
-            background: #eef0f4 !important;
-            color: #1a1c24 !important;
-            border: 1px solid #dde1e8;
-        }
-
-        /* ── Optimizer insight rows ─────────────────────────────── */
-        body.light-mode .opt-insight-row td {
-            background: #ecfdf5 !important;
-            color: #065f46 !important;
-        }
-
-        /* ── Optimizer filter pills ─────────────────────────────── */
-        body.light-mode .opt-filter-btn {
-            background: #f0f1f5 !important;
-            color: #5a5f72 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode .opt-filter-btn.active,
-        body.light-mode .opt-filter-btn:hover {
-            background: #4f46e5 !important;
-            color: #fff !important;
-        }
-
-        /* ── Optimizer copy button ──────────────────────────────── */
-        body.light-mode .opt-copy-btn {
-            background: #e8ecf1 !important;
-            color: #4a5568 !important;
-            border: 1px solid #dde1e8;
-        }
-
-        body.light-mode .opt-copy-btn:hover {
-            background: #d1d5de !important;
-            color: #1a1c24 !important;
-        }
-
-        /* ── Optimizer table overrides ──────────────────────────── */
-        body.light-mode #view-optimizer table th {
-            background: #f0f1f5 !important;
-            color: #4a5568 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode #view-optimizer table td {
-            color: #1a1c24 !important;
-            border-color: #e5e7eb !important;
-        }
-
-        body.light-mode #view-optimizer table tr:hover td {
-            background: #f8f9fb !important;
-        }
-
-        /* ── Optimizer inline type/category badges ──────────────── */
-        body.light-mode #view-optimizer td[style*="color:#22c55e"] {
-            color: #16a34a !important;
-        }
-
-        body.light-mode #view-optimizer td[style*="color:#f59e0b"] {
-            color: #d97706 !important;
-        }
-
-        /* ── Optimizer stat cards container ─────────────────────── */
-        body.light-mode #opt-cost-row {
-            background: #f8f9fb !important;
-        }
-
-        /* ── Optimizer progress bar tracks (inline bg:#333) ──────── */
-        body.light-mode #view-optimizer [style*="background:#333"] {
-            background: #e0e3e8 !important;
-        }
-
-        /* ── Optimizer code/kubectl snippets ──────────────────────── */
-        body.light-mode #view-optimizer code {
-            background: #eef0f4 !important;
-            color: #374151 !important;
-            border: 1px solid #dde1e8;
-        }
-
-        /* ── Optimizer inline muted text (color:#888, #aaa, #666) ── */
-        body.light-mode #view-optimizer span[style*="color:#888"],
-        body.light-mode #view-optimizer span[style*="color:#aaa"] {
-            color: #6b7280 !important;
-        }
-
-        body.light-mode #view-optimizer span[style*="color:#666"] {
-            color: #6b7280 !important;
-        }
-
-        /* ── Optimizer badge: AI Estimation text near header ──────── */
-        body.light-mode #opt-source-badge {
-            background: rgba(255,255,255,0.35) !important;
-            color: #ffffff !important;
-            font-weight: 600;
-        }
-
-        /* ── Remaining inline dark backgrounds catch-all ────────── */
-        body.light-mode [style*="background:#1a1a2e"],
-        body.light-mode [style*="background: #1a1a2e"],
-        body.light-mode [style*="background:#12132b"],
-        body.light-mode [style*="background: #12132b"],
-        body.light-mode [style*="background:#1e1e2e"],
-        body.light-mode [style*="background: #1e1e2e"],
-        body.light-mode [style*="background:#1e1e1e"],
-        body.light-mode [style*="background: #1e1e1e"],
-        body.light-mode [style*="background:#0f1117"],
-        body.light-mode [style*="background: #0f1117"],
-        body.light-mode [style*="background:#1e1f35"],
-        body.light-mode [style*="background: #1e1f35"],
-        body.light-mode [style*="background:#1a1b2e"],
-        body.light-mode [style*="background: #1a1b2e"] {
-            background: #f0f1f5 !important;
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode [style*="background:linear-gradient(135deg,#1a1a2e"],
-        body.light-mode [style*="background:linear-gradient(135deg,#1a2e1a"] {
-            background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode [style*="background:linear-gradient(135deg,#1a2e1a,#1e3a1e)"] {
-            background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
-            color: #065f46 !important;
-        }
-
-        /* ── Optimizer header: MUST come after catch-all to override ─ */
-        body.light-mode #view-optimizer > .panel > .panel-header {
-            background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
-            color: #ffffff !important;
-            border-color: #4338ca !important;
-        }
-
-        body.light-mode #view-optimizer > .panel > .panel-header span,
-        body.light-mode #view-optimizer > .panel > .panel-header button {
-            color: #ffffff !important;
-        }
-
-        body.light-mode #opt-gemini-badge {
-            background: rgba(255,255,255,0.3) !important;
-            color: #ffffff !important;
-        }
-
-        body.light-mode #opt-source-badge {
-            background: rgba(255,255,255,0.3) !important;
-            color: #ffffff !important;
-        }
-
-        /* ── AI toast & remaining text overrides ──────────────── */
-        body.light-mode #ai-message-toast {
-            background: linear-gradient(135deg, #eef2ff, #e8ecf8) !important;
-            color: #1a1c24 !important;
-            border-color: #dde1e8 !important;
-        }
-
-        body.light-mode [style*="color:#e0e0e0"],
-        body.light-mode [style*="color: #e0e0e0"],
-        body.light-mode [style*="color:#cdd6f4"],
-        body.light-mode [style*="color: #cdd6f4"],
-        body.light-mode [style*="color:#c8f0c8"],
-        body.light-mode [style*="color: #c8f0c8"] {
-            color: #1a1c24 !important;
-        }
-
-        body.light-mode [style*="color:#a0d4a0"],
-        body.light-mode [style*="color: #a0d4a0"] {
-            color: #065f46 !important;
-        }
-
-        body.light-mode [style*="border-left:4px solid #6f42c1"] {
-            border-left-color: #6f42c1 !important;
-        }
-
-        body.light-mode [style*="border-left:4px solid #0f9d58"] {
-            border-left-color: #16a34a !important;
-        }
-
-        /* Smooth transition for theme switching */
-        body,
-        body * {
-            transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-        }
-
-        /* ── Theme Toggle Button ──────────────────────────────────── */
-        .theme-toggle {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 6px 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: var(--text-secondary);
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-
-        .theme-toggle:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-
-        .theme-toggle .theme-icon {
-            font-size: 16px;
-            transition: transform 0.3s ease;
-        }
-
-        /* ── Base ────────────────────────────────────────────────── */
-        body {
-            background-color: var(--bg-page) !important;
-            color: var(--text-primary) !important;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-        }
-
-        h1,
-        h2,
-        h3,
-        h4 {
-            color: var(--text-primary) !important;
-        }
-
-        /* ── Panels / Cards ──────────────────────────────────────── */
-        .panel {
-            background: var(--bg-elevated) !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        .panel-header {
-            color: var(--text-primary) !important;
-            border-bottom-color: var(--border) !important;
-        }
-
-        .section-title {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Tables ──────────────────────────────────────────────── */
-        th {
-            background-color: var(--bg-surface) !important;
-            color: var(--text-secondary) !important;
-            border-bottom: 1px solid var(--border) !important;
-            font-size: 11px !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-        }
-
-        td {
-            border-bottom: 1px solid var(--border) !important;
-            color: var(--text-primary) !important;
-        }
-
-        tr:hover {
-            background-color: var(--bg-hover) !important;
-        }
-
-        /* ── Status text → subtle ────────────────────────────────── */
-        .status-running {
-            color: var(--success) !important;
-            font-weight: 500 !important;
-        }
-
-        .status-pending {
-            color: var(--warning) !important;
-            font-weight: 500 !important;
-        }
-
-        .status-failed {
-            color: var(--danger) !important;
-            font-weight: 500 !important;
-        }
-
-        /* ── Main Navigation Tabs (the rainbow buttons) ────────── */
-        .dashboard-container>div:first-child {
-            border-bottom-color: var(--border) !important;
-        }
-
-        /* All main-tab buttons → plain text with underline */
-        [id^="main-tab-"] {
-            background: none !important;
-            color: var(--text-secondary) !important;
-            border: none !important;
-            border-bottom: 2px solid transparent !important;
-            border-radius: 0 !important;
-            padding: 10px 16px !important;
-            font-size: 13px !important;
-            font-weight: 500 !important;
-            margin-bottom: -2px !important;
-            transition: color 0.2s, border-color 0.2s !important;
-        }
-
-        [id^="main-tab-"]:hover {
-            color: var(--text-primary) !important;
-            background: none !important;
-        }
-
-        [id^="main-tab-"].btn-primary,
-        [id^="main-tab-"].active {
-            color: var(--accent) !important;
-            border-bottom: 2px solid var(--accent) !important;
-            background: none !important;
-        }
-
-        /* ── AI action buttons → subtle text links ───────────── */
-        .ai-btn {
-            background: none !important;
-            border: 1px solid var(--border) !important;
-            color: var(--text-secondary) !important;
-            font-weight: 500 !important;
-            transition: color 0.2s, border-color 0.2s !important;
-            padding: 3px 10px !important;
-        }
-
-        .ai-btn:hover {
-            color: var(--accent) !important;
-            border-color: var(--accent) !important;
-            background: rgba(99, 102, 241, 0.08) !important;
-        }
-
-        /* Remove all gradient backgrounds from ai-btn variants */
-        .ai-btn-analyze,
-        .ai-btn-diagnose,
-        .ai-btn-insights,
-        .ai-btn-explain,
-        .ai-btn-risk,
-        .ai-btn-correlate,
-        .ai-btn-health,
-        .ai-btn-coverage,
-        .ai-btn-triage,
-        .ai-btn-impact,
-        .ai-btn-audit,
-        .ai-btn-route,
-        .ai-btn-policy,
-        .ai-btn-dep {
-            background: none !important;
-            color: var(--text-secondary) !important;
-        }
-
-        .ai-btn-heal {
-            background: none !important;
-            color: var(--danger) !important;
-            border-color: var(--danger) !important;
-            animation: none !important;
-        }
-
-        /* ── Generic buttons ─────────────────────────────────── */
-        .btn {
-            border-radius: 6px !important;
-        }
-
-        .btn-primary {
-            background-color: var(--accent) !important;
-            border: 1px solid var(--accent) !important;
-            color: #fff !important;
-        }
-
-        .btn-primary:hover {
-            background-color: var(--accent-hover) !important;
-        }
-
-        .btn-default {
-            background-color: var(--bg-surface) !important;
-            color: var(--text-secondary) !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        .btn-default:hover {
-            background-color: var(--bg-hover) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* ── Sub-tabs (workload type tabs, etc.) ─────────────── */
-        .tab-btn {
-            color: var(--text-secondary) !important;
-            border-bottom-color: transparent !important;
-        }
-
-        .tab-btn:hover {
-            color: var(--text-primary) !important;
-            background-color: transparent !important;
-        }
-
-        .tab-btn.active {
-            color: var(--accent) !important;
-            border-bottom-color: var(--accent) !important;
-        }
-
-        .panel-tabs {
-            border-bottom-color: var(--border) !important;
-        }
-
-        /* ── Nav buttons (filter tabs) ───────────────────────── */
-        .nav-btn {
-            background-color: var(--bg-surface) !important;
-            color: var(--text-secondary) !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        .nav-btn.active {
-            background-color: var(--accent) !important;
-            color: #fff !important;
-            border-color: var(--accent) !important;
-        }
-
-        .nav-btn:hover:not(.active) {
-            background-color: var(--bg-hover) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* ── Labels / Tags (the purple pills) ────────────────── */
-        .container-badge {
-            background: var(--bg-surface) !important;
-            color: var(--text-secondary) !important;
-            border: 1px solid var(--border) !important;
-            font-size: 11px !important;
-        }
-
-        /* ── Health badges ───────────────────────────────────── */
-        .health-healthy {
-            background: rgba(34, 197, 94, 0.12) !important;
-            color: var(--success) !important;
-        }
-
-        .health-degraded {
-            background: rgba(245, 158, 11, 0.12) !important;
-            color: var(--warning) !important;
-        }
-
-        .health-critical {
-            background: rgba(239, 68, 68, 0.12) !important;
-            color: var(--danger) !important;
-        }
-
-        .health-unknown {
-            background: var(--bg-surface) !important;
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Job badges ──────────────────────────────────────── */
-        .job-succeeded {
-            background: rgba(34, 197, 94, 0.12) !important;
-            color: var(--success) !important;
-        }
-
-        .job-running {
-            background: rgba(59, 130, 246, 0.12) !important;
-            color: var(--info) !important;
-        }
-
-        .job-failed {
-            background: rgba(239, 68, 68, 0.12) !important;
-            color: var(--danger) !important;
-        }
-
-        .job-pending {
-            background: rgba(245, 158, 11, 0.12) !important;
-            color: var(--warning) !important;
-        }
-
-        /* ── Risk cards ──────────────────────────────────────── */
-        .risk-card {
-            background: var(--bg-surface) !important;
-            color: var(--text-primary) !important;
-        }
-
-        .risk-critical {
-            border-color: var(--danger) !important;
-        }
-
-        .risk-high {
-            border-color: #f97316 !important;
-        }
-
-        .risk-medium {
-            border-color: var(--warning) !important;
-        }
-
-        .risk-low {
-            border-color: var(--success) !important;
-        }
-
-        /* ── Heal risk badges ────────────────────────────────── */
-        .heal-risk-low {
-            background: rgba(34, 197, 94, 0.12) !important;
-            color: var(--success) !important;
-        }
-
-        .heal-risk-medium {
-            background: rgba(245, 158, 11, 0.12) !important;
-            color: var(--warning) !important;
-        }
-
-        .heal-risk-high {
-            background: rgba(239, 68, 68, 0.12) !important;
-            color: var(--danger) !important;
-        }
-
-        /* ── Kubectl hints ───────────────────────────────────── */
-        .kubectl-hint {
-            background: var(--bg-page) !important;
-            color: var(--text-primary) !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        .copy-btn {
-            border-color: var(--accent) !important;
-            color: var(--accent) !important;
-        }
-
-        .copy-btn:hover {
-            background: var(--accent) !important;
-            color: #fff !important;
-        }
-
-        /* ── Modals ──────────────────────────────────────────── */
-        .modal {
-            background-color: rgba(0, 0, 0, 0.7) !important;
-        }
-
-        .modal-content {
-            background-color: var(--bg-elevated) !important;
-            border: 1px solid var(--border) !important;
-            color: var(--text-primary) !important;
-        }
-
-        .close {
-            color: var(--text-muted) !important;
-        }
-
-        .close:hover {
-            color: var(--text-primary) !important;
-        }
-
-        /* Modal headings & text */
-        .modal-content h2,
-        .modal-content h3,
-        .modal-content h4 {
-            color: var(--text-primary) !important;
-        }
-
-        .modal-content p,
-        .modal-content li,
-        .modal-content span,
-        .modal-content div {
-            color: inherit;
-        }
-
-        .modal-content strong {
-            color: var(--text-primary);
-        }
-
-        .modal-content td,
-        .modal-content th {
-            color: var(--text-primary) !important;
-            border-color: var(--border) !important;
-        }
-
-        /* YAML modal pre block */
-        #yaml-content {
-            background: var(--bg-page) !important;
-            color: #a5d6ff !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        /* AI Analysis modal summary */
-        #ai-analysis-summary,
-        [id*="analysis-summary"] {
-            background: var(--bg-surface) !important;
-            color: var(--text-primary) !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        #ai-health-score-ring,
-        .health-score-ring {
-            background: var(--bg-surface) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* Loading spinners in modals */
-        .modal-content [style*="border:4px solid #eee"],
-        .modal-content [style*="border: 4px solid #eee"] {
-            border-color: var(--border) !important;
-        }
-
-        .modal-content [style*="color:#666"],
-        .modal-content [style*="color: #666"] {
-            color: var(--text-secondary) !important;
-        }
-
-        .modal-content [style*="color:#333"],
-        .modal-content [style*="color: #333"] {
-            color: var(--text-primary) !important;
-        }
-
-        .modal-content [style*="color:#555"],
-        .modal-content [style*="color: #555"] {
-            color: var(--text-secondary) !important;
-        }
-
-        .modal-content [style*="color:#1a1a2e"] {
-            color: var(--text-primary) !important;
-        }
-
-        /* Help modal backgrounds */
-        .modal-content [style*="background:#f8f9fa"],
-        .modal-content [style*="background: #f8f9fa"],
-        .modal-content [style*="background:#f4f4f4"],
-        .modal-content [style*="background: #f4f4f4"],
-        .modal-content [style*="background:#f0f0f0"],
-        .modal-content [style*="background:#e9ecef"],
-        .modal-content [style*="background:#fff"],
-        .modal-content [style*="background: #fff"],
-        .modal-content [style*="background:white"],
-        .modal-content [style*="background: white"] {
-            background: var(--bg-surface) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* Help modal table rows & cells */
-        .modal-content table {
-            border-collapse: collapse;
-        }
-
-        .modal-content table tr {
-            border-color: var(--border) !important;
-        }
-
-        .modal-content table td[style*="border-right"],
-        .modal-content table td[style*="border-bottom"] {
-            border-color: var(--border) !important;
-        }
-
-        /* Help modal inline-styled sections */
-        .modal-content [style*="border:1px solid #ddd"],
-        .modal-content [style*="border: 1px solid #ddd"],
-        .modal-content [style*="border:1px solid #e0e0e0"],
-        .modal-content [style*="border: 1px solid #e0e0e0"],
-        .modal-content [style*="border:1px solid #eee"] {
-            border-color: var(--border) !important;
-        }
-
-        /* Help modal action buttons */
-        .modal-content button[style*="background:#4285f4"],
-        .modal-content button[style*="background:#0f9d58"],
-        .modal-content button[style*="background:#6f42c1"],
-        .modal-content button[style*="background:#17a2b8"] {
-            opacity: 0.9;
-        }
-
-        /* Config / events modal pre blocks */
-        .modal-content pre {
-            background: var(--bg-page) !important;
-            color: #cdd6f4 !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        /* Confirm modal */
-        #confirmModal .modal-content {
-            background: var(--bg-elevated) !important;
-        }
-
-        /* Security help modal */
-        #securityHelpModal .modal-content {
-            background: var(--bg-elevated) !important;
-        }
-
-        /* ConfigMap / Secret view modals */
-        #cmModal .modal-content,
-        #secretModal .modal-content {
-            background: var(--bg-elevated) !important;
-        }
-
-        /* Secret modal — force dark-mode table value cells */
-        #secretModal #secret-table-body td {
-            background: var(--bg-surface) !important;
-            color: var(--text-primary) !important;
-        }
-        #secretModal #secret-table-body td:first-child {
-            background: transparent !important;
-            color: var(--accent) !important;
-        }
-
-        /* Optimizer help modal */
-        #optimizerHelpModal .modal-content {
-            background: var(--bg-elevated) !important;
-        }
-
-        /* AI toast messages */
-        #ai-message-toast {
-            background: var(--bg-elevated) !important;
-            border: 1px solid var(--border) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* ── Gemini Generic Modal (AI Diagnose, Health, Pod, Job) ── */
-        #gemini-generic-modal .modal-content {
-            background: var(--bg-elevated) !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        #ggm-body {
-            color: var(--text-primary) !important;
-        }
-
-        #ggm-body h4 {
-            color: var(--text-primary) !important;
-        }
-
-        /* Verdict banners */
-        #ggm-body [style*="background:#fafafa"],
-        #ggm-body [style*="background:#f8f9fa"] {
-            background: var(--bg-surface) !important;
-        }
-
-        /* Positive signal badges */
-        #ggm-body [style*="background:#d4edda"] {
-            background: rgba(34, 197, 94, 0.15) !important;
-            color: #22c55e !important;
-        }
-
-        /* Risk / advice cards with light backgrounds */
-        #ggm-body [style*="background:#f8f0ff"],
-        #ggm-body [style*="background:#f0f4ff"],
-        #ggm-body [style*="background:#f0fff4"],
-        #ggm-body [style*="background:#fff3f3"],
-        #ggm-body [style*="background:#fff8f8"] {
-            background: var(--bg-surface) !important;
-        }
-
-        /* Text colors in generated content */
-        #ggm-body [style*="color:#555"],
-        #ggm-body [style*="color:#333"] {
-            color: var(--text-secondary) !important;
-        }
-
-        /* Inline code in modals */
-        #ggm-body code[style*="background:#eee"],
-        #ggm-body code[style*="background:#f0f0f0"] {
-            background: rgba(99, 102, 241, 0.15) !important;
-            color: #818cf8 !important;
-        }
-
-        /* Pod diagnose border separators */
-        #ggm-body [style*="border-bottom:1px solid #f0f0f0"] {
-            border-color: var(--border) !important;
-        }
-
-        /* ── Explain Resource Modal ───────────────────────────── */
-        #explainModal .modal-content {
-            background: var(--bg-elevated) !important;
-        }
-
-        #ex-purpose,
-        #ex-keys,
-        #ex-concerns,
-        #ex-recs {
-            color: var(--text-primary) !important;
-        }
-
-        /* Security concern cards */
-        #ex-concerns [style*="background:#fff8f8"] {
-            background: var(--bg-surface) !important;
-        }
-
-        #ex-concerns [style*="color:#333"] {
-            color: var(--text-primary) !important;
-        }
-
-        #ex-keys code[style*="background:#f0f0f0"] {
-            background: rgba(99, 102, 241, 0.15) !important;
-            color: #818cf8 !important;
-        }
-
-        #ex-keys [style*="color:#555"] {
-            color: var(--text-secondary) !important;
-        }
-
-        /* _mdLite inline code fix */
-        code[style*="background:#f0f0f0"] {
-            background: rgba(99, 102, 241, 0.15) !important;
-            color: #818cf8 !important;
-        }
-
-        /* ── Chat Panel (dark mode via vars) ────────────────────── */
-        body:not(.light-mode) #chat-panel {
-            background: var(--bg-elevated) !important;
-            border-left: 1px solid var(--border) !important;
-            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4) !important;
-        }
-
-        body:not(.light-mode) #chat-header {
-            background: var(--bg-surface) !important;
-            border-bottom: 1px solid var(--border) !important;
-        }
-
-        body:not(.light-mode) #chat-messages {
-            background: var(--bg-page) !important;
-        }
-
-        body:not(.light-mode) .chat-bubble.user {
-            background: var(--accent) !important;
-            color: #fff !important;
-        }
-
-        body:not(.light-mode) .chat-bubble.assistant {
-            background: var(--bg-surface) !important;
-            color: var(--text-primary) !important;
-            box-shadow: none !important;
-            border: 1px solid var(--border) !important;
-        }
-
-        body:not(.light-mode) #chat-input-area {
-            border-top-color: var(--border) !important;
-        }
-
-        body:not(.light-mode) #chat-input {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-            color: var(--text-primary) !important;
-        }
-
-        body:not(.light-mode) #chat-input:focus {
-            border-color: var(--accent) !important;
-        }
-
-        body:not(.light-mode) #chat-send-btn {
-            background: var(--accent) !important;
-        }
-
-        /* ── Container log tabs ──────────────────────────────── */
-        .container-log-tab {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-            color: var(--text-secondary) !important;
-        }
-
-        .container-log-tab.active {
-            background: var(--bg-page) !important;
-            color: var(--text-primary) !important;
-            border-color: var(--border) !important;
-        }
-
-        /* ── YAML prompt ─────────────────────────────────────── */
-        #yaml-prompt {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-            color: var(--text-primary) !important;
-        }
-
-        #cm-content {
-            background: var(--bg-page) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* ── AI search bar ───────────────────────────────────── */
-        #ask-ai-outer {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-        }
-
-        #ask-ai-outer.focused {
-            border-color: var(--accent) !important;
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
-            background: var(--bg-surface) !important;
-        }
-
-        #ai-query-input {
-            color: var(--text-primary) !important;
-        }
-
-        #ai-query-input::placeholder {
-            color: var(--text-muted) !important;
-        }
-
-        #ask-ai-suggestions {
-            background: var(--bg-elevated) !important;
-            border-color: var(--border) !important;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
-        }
-
-        .ask-ai-item {
-            color: var(--text-primary) !important;
-        }
-
-        .ask-ai-item:hover,
-        .ask-ai-item.highlighted {
-            background: var(--bg-hover) !important;
-        }
-
-        .ask-ai-cat {
-            color: var(--text-muted) !important;
-        }
-
-        /* ── Scrollbar ───────────────────────────────────────── */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: var(--bg-page);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border-light);
-            border-radius: 3px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-muted);
-        }
-
-        /* ── Selection ───────────────────────────────────────── */
-        ::selection {
-            background: rgba(99, 102, 241, 0.3);
-            color: #fff;
-        }
-
-        /* ── Security severity badges → muted ────────────────── */
-        [style*="background:#dc3545"],
-        [style*="background: #dc3545"],
-        [style*="background:#fd7e14"],
-        [style*="background: #fd7e14"],
-        [style*="background:#ffc107"],
-        [style*="background: #ffc107"],
-        [style*="background:#28a745"],
-        [style*="background: #28a745"],
-        [style*="background:#6c757d"],
-        [style*="background: #6c757d"] {
-            opacity: 0.85;
-        }
-
-        /* ── Google Fonts import ─────────────────────────────── */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-        /* ═══════════════════════════════════════════════════════════════════
-           NUCLEAR DARK-MODE OVERRIDE — catches ALL inline light-mode styles
-           in static HTML, modals, and JS-generated content.
-           Only active in dark mode (body does NOT have .light-mode class).
-           ═══════════════════════════════════════════════════════════════════ */
-
-        /* ── White / light backgrounds → dark surface ─────────────────── */
-        [style*="background:#fff"],
-        [style*="background: #fff"],
-        [style*="background:#fefefe"],
-        [style*="background: #fefefe"],
-        [style*="background:white"],
-        [style*="background: white"],
-        [style*="background-color:#fff"],
-        [style*="background-color: #fff"],
-        [style*="background-color:white"],
-        [style*="background-color: white"] {
-            background: var(--bg-surface) !important;
-        }
-
-        [style*="background:#f8f9fa"],
-        [style*="background: #f8f9fa"],
-        [style*="background:#f4f4f4"],
-        [style*="background: #f4f4f4"],
-        [style*="background:#f0f0f0"],
-        [style*="background: #f0f0f0"],
-        [style*="background:#e9ecef"],
-        [style*="background: #e9ecef"],
-        [style*="background:#eee"],
-        [style*="background: #eee"],
-        [style*="background:#fafafa"],
-        [style*="background: #fafafa"],
-        [style*="background:#f8fbff"],
-        [style*="background: #f8fbff"],
-        [style*="background:#fdf8ff"],
-        [style*="background: #fdf8ff"] {
-            background: var(--bg-surface) !important;
-        }
-
-        /* ── Pastel / tinted light backgrounds → dark themed ──────────── */
-        [style*="background:#f8f0ff"],
-        [style*="background:#f0f4ff"],
-        [style*="background:#f0fff4"],
-        [style*="background:#fff3f3"],
-        [style*="background:#fff8f8"],
-        [style*="background:#fff5f5"],
-        [style*="background:#fff8e1"],
-        [style*="background:#e8f0fe"],
-        [style*="background:#f0ebff"] {
-            background: var(--bg-surface) !important;
-        }
-
-        /* Light gradient backgrounds in help modal → dark gradient */
-        [style*="background:linear-gradient(135deg,#f0ebff,#fdf8ff)"] {
-            background: linear-gradient(135deg, var(--bg-surface), var(--bg-elevated)) !important;
-            border-color: var(--border-light) !important;
-        }
-
-        /* ── Dark text on light bg → light text ──────────────────────── */
-        [style*="color:#333"],
-        [style*="color: #333"] {
-            color: var(--text-primary) !important;
-        }
-
-        [style*="color:#444"],
-        [style*="color: #444"] {
-            color: var(--text-primary) !important;
-        }
-
-        [style*="color:#555"],
-        [style*="color: #555"] {
-            color: var(--text-secondary) !important;
-        }
-
-        [style*="color:#666"],
-        [style*="color: #666"] {
-            color: var(--text-secondary) !important;
-        }
-
-        [style*="color:#222"],
-        [style*="color: #222"] {
-            color: var(--text-primary) !important;
-        }
-
-        [style*="color:#1a1a2e"] {
-            color: var(--text-primary) !important;
-        }
-
-        [style*="color:#888"],
-        [style*="color: #888"] {
-            color: var(--text-muted) !important;
-        }
-
-        /* ── Light borders → dark borders ──────────────────────────── */
-        [style*="border:1px solid #ddd"],
-        [style*="border: 1px solid #ddd"],
-        [style*="border:1px solid #e0e0e0"],
-        [style*="border: 1px solid #e0e0e0"],
-        [style*="border:1px solid #eee"],
-        [style*="border: 1px solid #eee"],
-        [style*="border:1px solid #e9ecef"],
-        [style*="border: 1px solid #e9ecef"],
-        [style*="border:1px solid #d0d7de"],
-        [style*="border: 1px solid #d0d7de"],
-        [style*="border:1px solid #bbb"],
-        [style*="border: 1px solid #bbb"] {
-            border-color: var(--border) !important;
-        }
-
-        [style*="border:2px solid #4285f4"] {
-            border-color: #4285f4 !important;
-        }
-
-        [style*="border:2px solid #6f42c1"] {
-            border-color: #6f42c1 !important;
-        }
-
-        [style*="border-bottom:1px solid #f0f0f0"],
-        [style*="border-bottom: 1px solid #f0f0f0"],
-        [style*="border-bottom:1px solid #f4f4f4"],
-        [style*="border-bottom: 1px solid #f4f4f4"],
-        [style*="border-bottom:1px solid #e9ecef"],
-        [style*="border-bottom: 1px solid #e9ecef"],
-        [style*="border-bottom:2px solid #dee2e6"],
-        [style*="border-bottom: 2px solid #dee2e6"] {
-            border-bottom-color: var(--border) !important;
-        }
-
-        [style*="border-top:1px solid #e9ecef"],
-        [style*="border-top: 1px solid #e9ecef"],
-        [style*="border-top:1px solid #eee"],
-        [style*="border-top: 1px solid #eee"] {
-            border-top-color: var(--border) !important;
-        }
-
-        [style*="border-right:1px solid"],
-        [style*="border-left:1px solid #ddd"],
-        [style*="border-left: 1px solid #ddd"] {
-            border-color: var(--border) !important;
-        }
-
-        /* ── Inline code blocks with light bg → dark themed ──────── */
-        code[style*="background:#f0f0f0"],
-        code[style*="background: #f0f0f0"],
-        code[style*="background:#eee"],
-        code[style*="background: #eee"] {
-            background: rgba(99, 102, 241, 0.15) !important;
-            color: #818cf8 !important;
-        }
-
-        /* ── HR / separators → dark ─────────────────────────────── */
-        hr[style*="border-top:1px solid #e9ecef"],
-        hr[style*="border-top: 1px solid #e9ecef"] {
-            border-top-color: var(--border) !important;
-        }
-
-        /* ── Error / red-tinted backgrounds → dark red ──────────── */
-        [style*="background:#fff5f5"],
-        [style*="background: #fff5f5"] {
-            background: rgba(239, 68, 68, 0.1) !important;
-        }
-
-        [style*="color:#c00"] {
-            color: #f87171 !important;
-        }
-
-        /* ── Warning tinted backgrounds → dark amber ────────────── */
-        [style*="background:#fff3cd"],
-        [style*="background: #fff3cd"] {
-            background: rgba(245, 158, 11, 0.12) !important;
-        }
-
-        [style*="background:#fff8e1"],
-        [style*="background: #fff8e1"] {
-            background: rgba(245, 158, 11, 0.08) !important;
-        }
-
-        /* ── Progress bar track background ──────────────────────── */
-        [style*="background:#e9ecef"][style*="border-radius"] {
-            background: var(--bg-page) !important;
-        }
-
-        /* ── Chat panel input area white bg → dark ──────────────── */
-        #chat-input-area {
-            background: var(--bg-elevated) !important;
-            border-top-color: var(--border) !important;
-        }
-
-        #chat-input {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-            color: var(--text-primary) !important;
-        }
-
-        #chat-input:focus {
-            border-color: #6f42c1 !important;
-        }
-
-        /* ── AI search input color fix ──────────────────────────── */
-        [style*="color:#222"][style*="background:transparent"],
-        input[style*="color:#222"] {
-            color: var(--text-primary) !important;
-        }
-
-        /* ── ? / info circle buttons (small rounded) ────────────── */
-        button[style*="border:1px solid #bbb"][style*="border-radius:50%"] {
-            border-color: var(--border) !important;
-            color: var(--text-secondary) !important;
-        }
-
-        button[style*="border:1px solid #bbb"][style*="border-radius:50%"]:hover {
-            border-color: var(--accent) !important;
-            color: var(--accent) !important;
-        }
-
-        /* ── Help modal "Ask AI" card backgrounds ───────────────── */
-        .chat-chip[style*="background:#e8f0fe"] {
-            background: rgba(66, 133, 244, 0.15) !important;
-            border-color: rgba(66, 133, 244, 0.3) !important;
-        }
-
-        [style*="background:#e8f0fe"] {
-            background: rgba(66, 133, 244, 0.15) !important;
-        }
-
-        [style*="background:#f0ebff"] {
-            background: rgba(111, 66, 193, 0.15) !important;
-        }
-
-        /* ── Feature map table row alternation ──────────────────── */
-        tr[style*="background:#fafafa"],
-        tr[style*="background: #fafafa"],
-        tr[style*="background:#f8f9fa"],
-        tr[style*="background: #f8f9fa"] {
-            background: var(--bg-hover) !important;
-        }
-
-        /* ── Select dropdown in namespace selector ──────────────── */
-        select option {
-            background: var(--bg-elevated) !important;
-            color: var(--text-primary) !important;
-        }
-
-        /* ── Log correlation box ────────────────────────────────── */
-        #log-correlate-box {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-        }
-
-        #log-correlate-box em {
-            color: var(--text-muted) !important;
-        }
-
-        /* ── Vulnerability scanner UI ───────────────────────────── */
-        #vuln-meta,
-        #vuln-placeholder {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── YAML generator description text ────────────────────── */
-        [style*="color:#555"][style*="margin-bottom:12px"] {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Loading spinners ───────────────────────────────────── */
-        [style*="border:4px solid #eee"],
-        [style*="border: 4px solid #eee"] {
-            border-color: var(--border) !important;
-        }
-
-        /* ── Correlate modal paragraph ──────────────────────────── */
-        #logCorrelateModal p[style*="color:#666"] {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Optimizer loading text ─────────────────────────────── */
-        #opt-loading {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Global catch-all for any remaining light bg elements in modals ── */
-        .modal-content div[style],
-        .modal-content span[style],
-        .modal-content p[style],
-        .modal-content td[style],
-        .modal-content tr[style],
-        .modal-content ul[style],
-        .modal-content li[style],
-        .modal-content code[style],
-        .modal-content pre[style] {
-            /* Inherit dark text color by default */
-            color: inherit;
-        }
-
-        /* Ensure all modal text is visible */
-        .modal-content,
-        .modal-content * {
-            color: var(--text-primary);
-        }
-
-        .modal-content strong {
-            color: var(--text-primary) !important;
-        }
-
-        /* ── Help modal heading override ────────────────────────── */
-        #helpModal h2,
-        #helpModal h3 {
-            color: var(--text-primary) !important;
-        }
-
-        #helpModal hr {
-            border-top-color: var(--border) !important;
-        }
-
-        /* Help modal top border */
-        #helpModal .modal-content[style*="border-top:4px solid #4285f4"] {
-            border-top-color: var(--accent) !important;
-        }
-
-        /* ── Chat bubble code blocks in responses ───────────────── */
-        .chat-bubble code,
-        .chat-bubble pre {
-            background: var(--bg-page) !important;
-            color: #a5d6ff !important;
-        }
-
-        /* ── Ensure data tables in JS-generated content are dark ── */
-        thead tr[style*="background:#fff5f5"] {
-            background: rgba(239, 68, 68, 0.1) !important;
-        }
-
-        thead th[style*="color:#666"] {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Job ready progress bar track ───────────────────────── */
-        div[style*="background:#e9ecef"][style*="height:"] {
-            background: var(--bg-page) !important;
-        }
-
-        /* ── Span counter / label near progress bars ────────────── */
-        span[style*="color:#666"][style*="margin-left"] {
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Fix for "border-bottom:1px solid #f4f4f4" rows ────── */
-        tr[style*="border-bottom:1px solid #f4f4f4"] {
-            border-bottom-color: var(--border) !important;
-        }
-
-        /* ── Secret row red-tint ────────────────────────────────── */
-        tr[style*="background:#fff5f5"] {
-            background: rgba(239, 68, 68, 0.08) !important;
-        }
-
-        /* ── Fira Code error snippets ───────────────────────────── */
-        [style*="background:#fff5f5"][style*="font-family"] {
-            background: rgba(239, 68, 68, 0.1) !important;
-            color: #f87171 !important;
-        }
-
-        /* ── DaemonSet / resource_usage summary cards ────────────── */
-        [style*="background:#f8f9fa"][style*="color:#555"] {
-            background: var(--bg-surface) !important;
-            color: var(--text-secondary) !important;
-        }
-
-        /* ── Error pattern / consumer cards ─────────────────────── */
-        [style*="background:#fafafa"][style*="border:1px solid #f0f0f0"],
-        [style*="background:#fafafa"][style*="border:1px solid #e9ecef"] {
-            background: var(--bg-surface) !important;
-            border-color: var(--border) !important;
-        }
-
-        /* ── _mdLite generated inline code everywhere ────────────── */
-        code[style*="background:#f0f0f0"][style*="padding:1px"],
-        code[style*="background:#f0f0f0"][style*="padding:2px"] {
-            background: rgba(99, 102, 241, 0.15) !important;
-            color: #818cf8 !important;
-        }
-
-        /* =================================================================
-           RESPONSIVE DESIGN — Browser Resize / Min-Max Adjustments
-           ================================================================= */
-
-        /* ── Breakpoint 1: ≤1200px — Compact mode ────────────────── */
-        @media (max-width: 1200px) {
-
-            /* Main tab bar: allow wrapping to 2 rows */
-            .dashboard-container>div:first-child,
-            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 20px"] {
-                flex-wrap: wrap !important;
-            }
-
-            /* Slightly smaller tab text */
-            [id^="main-tab-"] {
-                padding: 8px 12px !important;
-                font-size: 12px !important;
-            }
-
-            /* Sub-tabs: allow horizontal scroll or wrap */
-            .panel-tabs {
-                flex-wrap: wrap;
-            }
-
-            .tab-btn {
-                padding: 6px 12px;
-                font-size: 12px;
-            }
-
-            /* AI search bar: reduce side margins */
-            #ask-ai-wrap {
-                margin: 0 15px !important;
-            }
-        }
-
-        /* ── Breakpoint 2: ≤900px — Tablet / half-screen ─────────── */
-        @media (max-width: 900px) {
-            body {
-                margin: 10px !important;
-            }
-
-            /* Row 1 (Title Bar): shrink logo & title */
-            div[style*="padding: 15px 20px"][style*="display: flex"][style*="align-items: center"][style*="gap: 15px"] {
-                padding: 10px 15px !important;
-                gap: 10px !important;
-            }
-
-            div[style*="padding: 15px 20px"] img[alt="GDC Logo"] {
-                height: 36px !important;
-            }
-
-            div[style*="padding: 15px 20px"] h1 {
-                font-size: 17px !important;
-            }
-
-            /* Row 2 (Control Bar): wrap to 2 rows */
-            div[style*="display: flex"][style*="justify-content: space-between"][style*="padding: 12px 20px"] {
-                flex-wrap: wrap !important;
-                gap: 10px !important;
-                padding: 10px 15px !important;
-            }
-
-            /* AI search bar: full width on its own row */
-            #ask-ai-wrap {
-                flex: none !important;
-                width: 100% !important;
-                order: 3 !important;
-                margin: 0 !important;
-            }
-
-            /* Pod status: allow it to wrap next to namespace selector */
-            div[style*="text-align: right"][style*="background: #1e1f35"] {
-                flex: 1 !important;
-                min-width: 0 !important;
-            }
-
-            /* Main tab bar: wrap buttons into 2 rows */
-            .dashboard-container>div:first-child,
-            div[style*="display: flex"][style*="gap: 10px"][style*="margin-bottom: 20px"] {
-                flex-wrap: wrap !important;
-                gap: 6px !important;
-            }
-
-            [id^="main-tab-"] {
-                padding: 7px 10px !important;
-                font-size: 12px !important;
-            }
-
-            /* AI Chat & Help buttons on tab bar: wrap to next row */
-            .dashboard-container>div:first-child>button[onclick*="toggleChatDrawer"],
-            .dashboard-container>div:first-child>button[onclick*="helpModal"] {
-                margin-left: 0 !important;
-            }
-
-            /* Panel tabs (workload/network sub-tabs): wrap */
-            .panel-tabs {
-                flex-wrap: wrap;
-                gap: 4px;
-            }
-
-            .tab-btn {
-                padding: 5px 10px;
-                font-size: 11px;
-            }
-
-            /* Dashboard panels: stack vertically */
-            .dashboard-container {
-                flex-direction: column !important;
-            }
-
-            .panel {
-                width: 100% !important;
-                min-width: 0 !important;
-            }
-
-            /* Tables: enable horizontal scroll */
-            .panel table {
-                display: block;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            th,
-            td {
-                padding: 8px 10px !important;
-                font-size: 12px !important;
-            }
-
-            /* Modal: wider on smaller screens */
-            .modal-content {
-                width: 92% !important;
-                margin: 3% auto !important;
-            }
-
-            /* Chat drawer: full width */
-            #chat-panel {
-                width: 100% !important;
-                right: -100% !important;
-            }
-
-            #chat-panel.open {
-                right: 0 !important;
-            }
-
-            /* AI buttons: allow wrapping */
-            .ai-btn {
-                font-size: 11px !important;
-                padding: 2px 7px !important;
-            }
-        }
-
-        /* ── Breakpoint 3: ≤600px — Mobile / narrow window ───────── */
-        @media (max-width: 600px) {
-            body {
-                margin: 5px !important;
-            }
-
-            /* Title bar: stack logo and title */
-            div[style*="padding: 15px 20px"][style*="display: flex"][style*="align-items: center"][style*="gap: 15px"] {
-                flex-wrap: wrap !important;
-                padding: 8px 10px !important;
-            }
-
-            div[style*="padding: 15px 20px"] img[alt="GDC Logo"] {
-                height: 30px !important;
-            }
-
-            div[style*="padding: 15px 20px"] h1 {
-                font-size: 15px !important;
-                flex: 1 !important;
-                min-width: 0 !important;
-            }
-
-            /* Theme toggle: compact */
-            .theme-toggle {
-                padding: 4px 8px !important;
-                font-size: 11px !important;
-            }
-
-            /* Control bar: fully stacked */
-            div[style*="display: flex"][style*="justify-content: space-between"][style*="padding: 12px 20px"] {
-                flex-direction: column !important;
-                align-items: stretch !important;
-                gap: 8px !important;
-                padding: 8px 10px !important;
-            }
-
-            /* Main tab bar: smaller wrapping buttons */
-            [id^="main-tab-"] {
-                padding: 6px 8px !important;
-                font-size: 11px !important;
-                flex: 0 0 auto !important;
-            }
-
-            /* Sub-tabs: horizontal scroll */
-            .panel-tabs {
-                overflow-x: auto !important;
-                flex-wrap: nowrap !important;
-                -webkit-overflow-scrolling: touch;
-                scrollbar-width: thin;
-            }
-
-            .tab-btn {
-                flex-shrink: 0;
-            }
-
-            /* Tables: compact */
-            th,
-            td {
-                padding: 6px 8px !important;
-                font-size: 11px !important;
-            }
-
-            /* Buttons & badges */
-            .btn {
-                padding: 4px 8px !important;
-                font-size: 11px !important;
-            }
-
-            .health-badge,
-            .job-status-badge,
-            .heal-risk-badge {
-                font-size: 10px !important;
-                padding: 2px 8px !important;
-            }
-
-            .health-score-ring {
-                width: 50px !important;
-                height: 50px !important;
-                font-size: 16px !important;
-            }
-
-            /* AI search: smaller text */
-            #ai-query-input {
-                font-size: 12px !important;
-            }
-
-            #ask-ai-outer {
-                border-radius: 18px !important;
-            }
-
-            /* Modals: near full-screen */
-            .modal-content {
-                width: 96% !important;
-                margin: 2% auto !important;
-                padding: 12px !important;
-                max-height: 90vh !important;
-            }
-
-            /* Kubectl hints: allow wrapping */
-            .kubectl-hint {
-                flex-wrap: wrap !important;
-                font-size: 11px !important;
-                word-break: break-all;
-            }
-        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
     </style>
 
     <!-- xterm.js for terminal -->
@@ -2735,11 +496,6 @@
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <!-- Client-side mock data for demo/offline mode (file:// protocol) -->
     <script>
-        // Resolve mock_data.js path — ONLY for file:// (offline demo) mode.
-        // On the cluster (http://), mock_data.js is NOT needed because the
-        // real K8s API backend is available. Loading it via http would also
-        // cause 'Unexpected token <' errors when the auth middleware
-        // intercepts the request and returns the CIDP login page.
         (function () {
             if (window.location.protocol === 'file:') {
                 var s = document.createElement('script');
@@ -2749,39 +505,75 @@
                 s.async = false;
                 document.head.appendChild(s);
             }
-            // http:// mode: skip mock_data.js entirely — real APIs are used.
         })();
     </script>
 </head>
 
 <body>
 
-    <!-- Header -->
-    <div style="margin: -20px -20px 20px -20px;">
-        <!-- Row 1: Full Width Title Bar -->
-        <div
-            style="background-color: var(--bg-surface); padding: 15px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); border-bottom: 1px solid var(--border);">
-            <img src="/static/logo.png" alt="GDC Logo"
-                style="height: 50px; background: var(--bg-hover); border-radius: 6px; padding: 4px;">
-            <h1
-                style="margin: 0; font-size: 22px; color: var(--text-primary); font-weight: 600; letter-spacing: -0.3px; flex:1;">
-                GDC Dashboard
-            </h1>
-            <button id="theme-toggle-btn" class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-                <span class="theme-icon">🌙</span>
-                <span class="theme-label">Dark</span>
-            </button>
+    <!-- ═══ Sidebar Navigation ═══ -->
+    <aside class="gdc-sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">⎈</div>
+            <div>
+                <div class="logo-text">GDC Dashboard</div>
+                <div class="logo-sub">AI-Powered Ops</div>
+            </div>
         </div>
 
-        <!-- Row 2: Control Bar (Namespace & Stats) -->
-        <div
-            style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background-color: var(--bg-page); border-bottom: 1px solid var(--border);">
-            <!-- Left: Namespace Selector -->
-            <div
-                style="display: flex; align-items: center; gap: 10px; background: var(--bg-elevated); padding: 8px 15px; border-radius: 6px; border: 1px solid var(--border);">
-                <label for="namespace-select"
-                    style="font-size: 13px; font-weight: 500; color: #8b8fa3; margin: 0;">Namespace:</label>
-                <select id="namespace-select"
+        <nav class="nav-section">
+            <div class="nav-label">Operations</div>
+            <button class="nav-item active" id="sidebar-nav-workloads" onclick="switchMainTab('workloads')">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                Workloads
+            </button>
+            <button class="nav-item" id="sidebar-nav-networking" onclick="switchMainTab('networking')">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                Networking
+            </button>
+            <button class="nav-item" id="sidebar-nav-optimizer" onclick="switchMainTab('optimizer')">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+                Resource Optimizer
+            </button>
+            <button class="nav-item" id="sidebar-nav-security" onclick="switchMainTab('security')">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Security Scan
+            </button>
+            <button class="nav-item" id="sidebar-nav-yaml-gen" onclick="switchMainTab('yaml-gen')">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                YAML Generator
+            </button>
+        </nav>
+
+        <nav class="nav-section">
+            <div class="nav-label">Intelligence</div>
+            <button class="nav-item" onclick="toggleChatDrawer()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                AI Chat
+            </button>
+            <button class="nav-item" onclick="document.getElementById('helpModal').style.display='block'">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Help & Guide
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-avatar">GDC</div>
+            <div>
+                <div class="user-name">GDC Operator</div>
+                <div class="user-role">Platform Engineer</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ═══ Main Content ═══ -->
+    <main class="gdc-main">
+        <!-- Top Bar -->
+        <div class="gdc-topbar">
+            <div class="topbar-section">
+                <div class="namespace-selector-wrap">
+                    <span class="namespace-dot"></span>
+                    <select id="namespace-select"
                     onchange="fetchData(); if (typeof refreshAIHealthBanners==='function') refreshAIHealthBanners();"
                     style="padding: 2px 5px; font-size: 13px; border: none; outline: none; background: transparent; font-weight: 500; color: #e2e4e9;">
                     <option value="namespace-dev">GDC-DEV</option>
@@ -2790,10 +582,10 @@
                     <option value="preprod">Preprod</option>
                     <option value="prod">Prod</option>
                 </select>
+                </div>
             </div>
-
-            <!-- Middle: AI Search Command Palette -->
-            <div style="flex: 1; margin: 0 30px; position: relative; display: flex; align-items: center; gap: 10px;"
+            <div class="topbar-search-wrap">
+                <div style="flex: 1; margin: 0 30px; position: relative; display: flex; align-items: center; gap: 10px;"
                 id="ask-ai-wrap">
                 <style>
                     #ask-ai-outer {
@@ -2833,7 +625,7 @@
 
                     #ask-ai-outer.loading {
                         border-color: transparent;
-                        background: linear-gradient(#fff, #fff) padding-box,
+                        background: linear-gradient(var(--bg-sidebar), var(--bg-sidebar)) padding-box,
                             linear-gradient(90deg, #4285f4, #0f9d58, #f4b400, #db4437, #4285f4 200%) border-box;
                         background-size: 200% auto;
                         animation: ask-ai-shimmer 1.5s linear infinite;
@@ -2852,7 +644,7 @@
                         padding: 9px 8px;
                         font-size: 14px;
                         outline: none;
-                        color: #222;
+                        color: var(--text-primary);
                     }
 
                     #ask-ai-spinner {
@@ -2860,8 +652,8 @@
                         width: 16px;
                         height: 16px;
                         border-radius: 50%;
-                        border: 2px solid #eee;
-                        border-top-color: #4285f4;
+                        border: 2px solid rgba(255,255,255,0.1);
+                        border-top-color: var(--accent);
                         animation: spin 0.7s linear infinite;
                         margin-right: 10px;
                         flex-shrink: 0;
@@ -2951,50 +743,19 @@
                 <!-- Toast / reply -->
                 <div id="ai-message-toast"></div>
             </div>
-
-            <!-- Right: Pod Status & Time -->
-            <div
-                style="text-align: right; background: #1e1f35; padding: 8px 15px; border-radius: 6px; border: 1px solid #2a2b45;">
+            </div>
+            <div class="topbar-right">
                 <div id="pod-status-summary"
-                    style="font-size: 13px; font-weight: 500; color: #e2e4e9; margin-bottom: 2px;">
+                    style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap;">
                     Loading pod stats...
                 </div>
-                <p id="last-updated" style="color: #888; font-size: 11px; margin: 0;"></p>
-            </div>
-            <div style="margin-left: auto;">
-                <!-- Optimizer moved to main tab -->
+                <p id="last-updated" style="color: var(--text-muted); font-size: 0.65rem; margin: 0;"></p>
             </div>
         </div>
-    </div>
 
-    <div class="dashboard-container" style="display: block;">
-
-        <!-- Top Level Tabs -->
-        <div
-            style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #2a2b45; padding-bottom: 0;">
-            <button id="main-tab-workloads" class="btn btn-primary"
-                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px;"
-                onclick="switchMainTab('workloads')">📦 Workloads</button>
-            <button id="main-tab-networking" class="btn btn-default"
-                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none;"
-                onclick="switchMainTab('networking')">🌐 Networking</button>
-            <button id="main-tab-optimizer" class="btn btn-default"
-                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none;"
-                onclick="switchMainTab('optimizer')">📊 Smart Resource Optimizer</button>
-            <button id="main-tab-security" class="btn btn-default"
-                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none;"
-                onclick="switchMainTab('security')">🛡️ Security Scan</button>
-            <button id="main-tab-yaml-gen" class="btn btn-default"
-                style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; border-bottom: none; background:none; color:#8b8fa3;"
-                onclick="switchMainTab('yaml-gen')">&#10024; YAML Generator</button>
-            <button onclick="toggleChatDrawer()"
-                style="margin-left:auto; background:none; color:#8b8fa3; border:1px solid #2a2b45; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px;">&#128172;
-                AI Chat</button>
-            <button onclick="document.getElementById('helpModal').style.display='block'" title="AI Help & Guide" style="background:none; border:1px solid #2a2b45; border-radius:6px;
-                       padding:6px 12px; cursor:pointer; font-size:13px; color:#5e6178;">❓ Help</button>
-        </div>
-
-        <!-- Workloads View -->
+        <!-- Scrollable Content -->
+        <div class="gdc-content">
+<!-- Workloads View -->
         <div id="view-workloads" style="display: block;">
             <!-- Health Pulse Banner (compact single-line pill) -->
             <div id="health-pulse-banner" style="display:none;margin-bottom:10px;">
@@ -3343,10 +1104,10 @@
 
                 .sec-cat-btn {
                     padding: 5px 12px;
-                    border: 1px solid #2a2b45;
+                    border: 1px solid var(--border);
                     border-radius: 16px;
-                    background: #1a1b2e;
-                    color: #8b8fa3;
+                    background: var(--bg-card);
+                    color: var(--text-secondary);
                     font-size: 12px;
                     cursor: pointer;
                     transition: all .15s;
@@ -3354,14 +1115,14 @@
 
                 .sec-cat-btn.active,
                 .sec-cat-btn:hover {
-                    background: #6366f1;
-                    border-color: #6366f1;
+                    background: var(--accent);
+                    border-color: var(--accent);
                     color: #fff;
                 }
 
                 .sec-insight-row td {
-                    background: #1a1b2e !important;
-                    color: #8b8fa3;
+                    background: var(--bg-card) !important;
+                    color: var(--text-muted);
                     font-size: 12px;
                     font-style: italic;
                     padding: 4px 8px 8px 32px !important;
@@ -3378,7 +1139,7 @@
                 }
             </style>
 
-            <div id="sec-loading" style="display: none; padding: 20px; text-align: center; color: #666;">
+            <div id="sec-loading" style="display: none; padding: 20px; text-align: center; color: var(--text-muted);">
                 <div style="font-size:1.1em; margin-bottom:8px;">🤖 AI is analysing your cluster...</div>
                 <div style="color:#888; font-size:13px;">Scanning workloads, networking, ConfigMaps, and Secrets
                 </div>
@@ -3418,7 +1179,7 @@
                 <span>&#10024; ✨ AI YAML Generator</span>
             </div>
             <div style="padding:20px;">
-                <p style="color:#555; margin-bottom:12px;">Describe what Kubernetes resource you want to generate:</p>
+                <p style="color:var(--text-muted); margin-bottom:12px;">Describe what Kubernetes resource you want to generate:</p>
                 <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
                     <button class="btn btn-default" style="font-size:12px;"
                         onclick="setYamlPrompt('Create a Deployment for nginx with 3 replicas and resource limits')">Deployment</button>
@@ -3591,9 +1352,9 @@
         }
 
         .chat-chip {
-            background: #f0ebff;
-            color: #6f42c1;
-            border: 1px solid #d0b8ff;
+            background: var(--accent-glow);
+            color: var(--accent);
+            border: 1px solid var(--border-active);
             border-radius: 20px;
             padding: 3px 10px;
             font-size: 11px;
@@ -3602,7 +1363,7 @@
         }
 
         .chat-chip:hover {
-            background: #e0d0ff;
+            background: rgba(6,182,212,0.25);
         }
 
         /* Message timestamps */
@@ -4839,6 +2600,10 @@
     </div>
 
 
+        </div><!-- end gdc-content -->
+    </main><!-- end gdc-main -->
+
+
     <script>
         console.log('=== MAIN SCRIPT BLOCK STARTING ===');
         let refreshInterval;
@@ -4876,6 +2641,11 @@
         let currentFilter = null; // { target: 'Pod', criteria: { status: 'Failed' } }
 
         function switchMainTab(tab) {
+            // Update sidebar navigation highlights
+            document.querySelectorAll('.gdc-sidebar .nav-item').forEach(n => n.classList.remove('active'));
+            const sidebarNav = document.getElementById('sidebar-nav-' + tab);
+            if (sidebarNav) sidebarNav.classList.add('active');
+
             // Persist active tab in URL hash so page refresh restores it
             // Clear sub-tab when switching main tabs — each tab has its own sub-tabs
             try { history.replaceState(null, '', '#tab=' + tab); } catch (e) { }
@@ -8665,6 +6435,6 @@
     </script>
 
 
-</body>
 
+</body>
 </html>
