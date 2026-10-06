@@ -54,6 +54,47 @@ Rather than presenting static tables and walls of text, KubeInsight contextually
 
 ---
 
+## 📐 Conceptual Architecture & Flow
+
+The platform's operational flow connects our engineering teams, the Gemini AI engine, and our GDC workloads seamlessly:
+
+* 🎨 **Editable Excalidraw Diagram:** [kubeinsight-conceptual-architecture.excalidraw](file:///Users/rajeshe/.gemini/antigravity/scratch/mock-project-gemini/docs/diagrams/kubeinsight-conceptual-architecture.excalidraw)  
+  *(Can be imported directly into [excalidraw.com](https://excalidraw.com), VSCode Excalidraw extension, or Obsidian).*
+
+```mermaid
+graph LR
+    subgraph Users ["👤 Enterprise Users & Teams"]
+        Dev["👨‍💻 Application Developers<br/>Self-service triage & logs"]
+        OnCall["🚨 On-Call & Support<br/>2 AM instant RCA & fixes"]
+        SRE["🛠️ Platform & SREs<br/>Cost right-sizing & security"]
+        UI["🌐 KubeInsight Web UI<br/>• Natural Language Search<br/>• 1-Click AI Diagnosis<br/>• Multi-Container Logs<br/>• In-Browser Shell"]
+        Dev --> UI
+        OnCall --> UI
+        SRE --> UI
+    end
+
+    subgraph Core ["🤖 KubeInsight Core Platform (Single Pod)"]
+        subgraph AI ["🧠 Google Gemini AI Engine (Vertex AI)"]
+            RCA["⚡ 1-Click RCA & Diagnosis<br/>Correlates logs, events & specs"]
+            Agent["💬 Autonomous SRE Agent<br/>Live K8s tool-calling loop"]
+            Cost["💰 Smart Cost Optimizer<br/>Detects over-provisioning"]
+            Sec["🛡️ Security Guardian<br/>CIS benchmarks & CVE scan"]
+        end
+        Gov["🔒 Enterprise Security Guardrails<br/>• Zero-Secret Scrubbing<br/>• Namespace-Scoped RBAC<br/>• Deterministic Fallback"]
+    end
+
+    subgraph GDC ["☸️ Google Distributed Cloud (GDC)"]
+        Argo["🚀 ArgoCD (GitOps Engine)<br/>'How do I DEPLOY?'"]
+        K8s["📦 Microservice Workloads<br/>• Deployments & Pods<br/>• App & Istio Sidecars<br/>• Metrics-Server CPU/RAM<br/>• Live Logs & Events"]
+        Argo -. Deploys .-> K8s
+    end
+
+    UI <==>|"Telemetry & Queries"| Core
+    Core <==>|"K8s API Calls & Metrics"| K8s
+```
+
+---
+
 ## 📊 Business Impact by the Numbers
 
 | Operational Dimension | Traditional Operations (`kubectl` / Raw Logs) | With KubeInsight (Gemini AI) | Measured Business Benefit |
