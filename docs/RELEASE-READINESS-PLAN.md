@@ -18,7 +18,7 @@
 - 30 microservices, trunk-based development, continuous UAT deployments
 - Any subset (1-10+) may be released on a given Friday
 - Only developers know which services are "ready" — this is a human decision
-- Wednesday 5 PM cutoff, Friday release cadence
+- Wednesday 2 PM EST cutoff, Friday release cadence
 
 ---
 
